@@ -1,0 +1,110 @@
+1200 0 0 0           
+16 TracePro - 3.2.2 14 ACIS 12.0.6 NT 24 Sat Sep 12 01:56:21 2020 
+1 9.9999999999999995e-007 1e-010 
+End-of-ACIS-data 
+TracePro Begin
+Version: 3 2 2
+Raytrace Limits
+0.05 0.5461 1000 1000 1000 1000
+Raytrace Wavelength List
+0.5461 1
+End Raytrace Wavelength List
+Raytrace WaveBand List
+0 -1 1
+End Raytrace WaveBand List
+Source Raytrace Options1
+0 0
+Raytrace Elapsed Time
+0 0 0 0
+Raytrace Options
+1 1 1 0 1 0 0 0 0 1e+006
+Advanced Raytrace Options
+1 32000 0 0 6 10 0 0 4 5 0 5 1
+Raytrace Simulation
+0 1 0
+Raytrace Simulation2
+0 0 0 0 1000
+GridRay Position
+0 0 0
+GridRay Vector
+0 0 1
+GridRay Up
+0 1 0
+GridRay Geometry
+10 0 10 10 0 0 0
+Orientations and Angles
+1 0 1 0 1
+Beam Options
+0 0 0 0 0 100 1
+Beam Profile
+1 1 0 0
+Beam Direction
+0 0 1
+Beam Up Vector
+0 1 0
+Grid Polarization
+0 1 0 0 0
+Ray Progress Update Interval
+10
+FluxMap Normal
+0 0 1
+FluxMap Up
+0 1 0
+FluxMap Flags
+0 0 0 0 0 0 0 0 0 0 1 0 0 0 0
+FluxMap Options
+50 0 0 15 0 0 128
+FluxMap Options2
+0 0 0 0 0
+FluxMap Display Options
+0 10
+3D FluxMap Flags
+1 0 1 1
+3D FluxMap Options
+50 0
+Ray Colors
+0
+Default temperature
+298.150000
+PolarizationMap Normal
+0 0 1
+PolarizationMap Up
+0 1 0
+PolarizationMap Flags
+0 0 0
+PolarizationMap Options
+11 0 0 1
+CandelaMap Normal
+0 -1 0
+CandelaMap Up
+0 0 1
+CandelaMap Options
+0 90 120 90 90 0
+CandelaMap Rectangle
+10 10 0
+CandelaMap Smoothing
+90 90
+CandelaMap Distributions
+0 90 4
+CandelaMap Flags
+0 0 0 0 0 10 0 10 0 1 1 0
+CandelaMap Flags2
+0 0 0 0 0 0 0 0 0 0 0
+CandelaMap Flags3
+0 0
+CandelaMap Ranges
+0 0 0 0 0 0
+VolumeFlux Position1
+0 0 0
+VolumeFlux Position2
+0 0 0
+VolumeFlux Cells
+0 0 0
+VolumeFlux ResultsFile
+
+Named View List
+0
+TracePro Notes
+
+End Notes
+TracePro End

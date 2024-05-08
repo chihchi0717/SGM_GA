@@ -1,0 +1,86 @@
+(define Macro1
+   (lambda ( )
+    (insert:part "D:/GAPY/file/prism_sat_file.SAT")
+(view:profiles "xy")
+(view:zoom-all)
+(edit:select-all-objects)
+(property:apply-material (entity 1) "SCHOTT" "BK7" (gvector 0 0 0))
+(edit:clear-selection)
+     
+(edit:add-selection (tools:face-in-body 0 (entity 1)))
+(edit:add-selection (tools:face-in-body 147 (entity 1)))
+(edit:add-selection (tools:face-in-body 148 (entity 1)))
+(edit:add-selection (tools:face-in-body 150 (entity 1)))
+(property:apply-surface (tools:face-in-body 0 (entity 1)) (list "Perfect Absorber" "Default")
+  (gvector 0 0 0) (gvector 0 0 0)
+  (position 0 0 0) (gvector 0 0 0) #t)
+(property:apply-surface (tools:face-in-body 147 (entity 1)) (list "Perfect Absorber" "Default")
+  (gvector 0 0 0) (gvector 0 0 0)
+  (position 0 0 0) (gvector 0 0 0) #t)
+(property:apply-surface (tools:face-in-body 148 (entity 1)) (list "Perfect Absorber" "Default")
+  (gvector 0 0 0) (gvector 0 0 0)
+  (position 0 0 0) (gvector 0 0 0) #t)
+(property:apply-surface (tools:face-in-body 150 (entity 1)) (list "Perfect Absorber" "Default")
+  (gvector 0 0 0) (gvector 0 0 0)
+  (position 0 0 0) (gvector 0 0 0) #t)
+     
+(property:apply-flux-surface-source (tools:face-in-body 0 (entity 31)) 100 1000 2 #f)
+(analysis:candela-normal (gvector 0 -1 0))
+(analysis:candela-up (gvector -1 0 0))
+(analysis:candela-ray-type "missed")
+(analysis:candela-symmetry "none")
+(analysis:candela-distribution 1 #f 540 #t #f)
+(analysis:candela-distribution-luminaire 180)
+(analysis:candela-distribution-max #f 0)
+(analysis:candela-distribution-min #f 0)
+(analysis:candela-distribution-log-plot #t)
+(analysis:candela-rect-distribution-angular-width 180)
+(raytrace:set-radiometric-units-photometric)
+(raytrace:source)     
+     
+     
+     (define ang_ini 10)             ;;初始仰角
+     (define end 85)                ;;最終仰角
+     (define angle 10)               ;;間隔角度
+     (define rays_ini 1000)         ;;初始光線數
+     (define rays_end 1000)
+     (define rays_times 2)          ;;光線數倍數
+     (define ini (- ang_ini angle))
+     (define rays (/ rays_ini rays_times))
+     (define name "prism light trace data")                           
+     (define no1 "1_")  
+     (define no2 "2_")
+     (define no3 "3_")
+     (define no4 "4_")
+     (define bmp ".bmp")         
+     (define txt ".txt")                      
+     (define s1 "-")                     
+     (define PCD "PCD")   
+     (define RCD "RCD")
+     (do                                     ;; loop over "i" form      
+       ((i (+ ini angle) (+ i angle)))       ;; 初始仰角 (0) to 最終仰角 by + num 度      
+       ((> i end))                           ;; quit when i is 最終仰角             
+       (define s2 (number->string i))     
+       (entity:rotate (entity 31) 55 490 0 0 0 1 angle);;對z軸旋轉 num 度  
+       (do                     
+         ((i (* rays rays_times) (* i rays_times)))                       
+         ((> i rays_end))    
+         (define s8 (number->string i))                                       
+         (define bmp (string-append name s1 no1 s2 bmp ))
+         (define pcd (string-append name s1 no2 s2 PCD bmp ))
+         (define rcd (string-append name s1 no3 s2 RCD bmp ))
+         (define txt (string-append name s1 no4 s2 txt))
+         (raytrace:source)                          
+         (file:save-as bmp)    
+         (analysis:candela-save-bmp "polar-distribution" pcd)    
+         (analysis:candela-save-bmp "rectangular-distribution" rcd)                           
+         (analysis:candela-save-txt "polar-distribution" txt 361)
+         )      
+       ;;(entity:rotate (entity 31) 55 390 0 0 0 1 angle)                   
+       )
+      (file:save-as "D:/GAPY/file/Untitled.OML")
+      (file:close)
+      (file:new)
+     
+))
+(Macro1)
