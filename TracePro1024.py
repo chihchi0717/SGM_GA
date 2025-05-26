@@ -62,6 +62,7 @@ def tracepro(population_number):
             window1[u'開啟(&O)Button'].click()
         except IndexError:
             print("已開啟 Macro 開始模擬")
+            start_time = time.time()
             check_run = -1
 
     '''檢查 start.OML 並在模擬結束後重命名為 completion_signal.OML'''
@@ -82,9 +83,12 @@ def tracepro(population_number):
         window1[u'檔案名稱(&N):Edit'].type_keys(r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\Data\Reset.scm")
         time.sleep(sleep_time)
         window1[u'開啟(&O)Button'].click()
+
     else:
         print("模擬未完成或失敗，跳過初始化")
 
+    print("Execution time:", round(time.time() - start_time, 2), "sec")
+    
     return OK_or_NOT
 
 tracepro(1)

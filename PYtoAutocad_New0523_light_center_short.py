@@ -166,11 +166,11 @@ def Build_model(sid_ang, success_num=1, mode="stair"):
     time.sleep(sleep_time)
     send_command_with_retry(acad, "Explode\nALL\n\n")
     send_command_with_retry(acad, "UNION\nALL\n\n")
-    
+
     light_source_length = 1
     actual_array_top = top + (rows - 1) * (top - bottom)
     array_center_y = (actual_array_top + bottom) / 2
-    print("TracePro rotation center:", 30, array_center_y, 0.5)
+    #print("TracePro rotation center:", 30, array_center_y, 0.5)
 
     start_point = APoint(100, array_center_y * scale, 0)
     send_command_with_retry(

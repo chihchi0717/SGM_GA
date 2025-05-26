@@ -32,8 +32,8 @@
     (define end 80) ; 結束角度
     (define angle 10) ; 每次增加的角度
     (define ini (- ang_ini angle))
-    (define center_x 5)
-    (define center_y 13)
+    (define center_x 0)
+    (define center_y 13.2)
     (define center_z 0)
     (define output_path "C:/Users/user/Desktop/NTHU/MasterThesis/GA/SGM_GA/file/output")
 
