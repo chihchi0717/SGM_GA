@@ -63,10 +63,7 @@ def Build_model(sid_ang, success_num=1, mode="stair"):
     equ_bc = lambda x: slope_bc * x + intercept_bc
 
     pixel_size = 22
-    top = (math.floor(equ_bc(0) / pixel_size)) * pixel_size
-    bottom = (math.ceil(equ_ac(0) / pixel_size)) * pixel_size
-    current_x1 = current_x2 = 0
-    current_y1, current_y2 = bottom, top
+    
 
     acad = retry_autocad_call(lambda: Autocad(create_if_not_exists=True))
     acad.app.Documents.Add()
@@ -75,6 +72,10 @@ def Build_model(sid_ang, success_num=1, mode="stair"):
     time.sleep(sleep_time)
 
     if mode == "triangle":
+        # top = sid_ang[0]
+        # bottom = 0
+        top = (math.floor(equ_bc(0) / pixel_size)) * pixel_size
+        bottom = (math.ceil(equ_ac(0) / pixel_size)) * pixel_size
         for p1, p2 in zip([A, B, C], [B, C, A]):
             acad.model.AddLine(
                 APoint(p1[0] * scale, p1[1] * scale),
@@ -85,9 +86,15 @@ def Build_model(sid_ang, success_num=1, mode="stair"):
             acad,
             f"-BOUNDARY\n{round(center[0]*scale, 4)},{round(center[1]*scale, 4)}\n\n",
         )
+        
         send_command_with_retry(acad, "_EXTRUDE\nL\n\n1\n")
 
     elif mode == "stair":
+        top = (math.floor(equ_bc(0) / pixel_size)) * pixel_size
+        bottom = (math.ceil(equ_ac(0) / pixel_size)) * pixel_size
+        current_x1 = current_x2 = 0
+        current_y1, current_y2 = bottom, top
+
         pos, pos1, pos2 = [(-22, bottom), (-22, top)], [], []
         step1 = step2 = 0
 
@@ -153,7 +160,9 @@ def Build_model(sid_ang, success_num=1, mode="stair"):
         acad, f"-BOUNDARY\n{round(Ix*scale,4)},{round(Iy*scale,4)}\n\n"
     )
     send_command_with_retry(acad, "_EXTRUDE\nL\n\n1\n")
-    
+    send_command_with_retry(acad, "-BLOCK\nprism\n0,0,0\nL\n\n")
+
+    send_command_with_retry(acad, "UNION\nALL\n\n")
 
     rows, columns = 30, 1
     #row_spacing = (top - bottom) * scale * (rows - 1)
@@ -163,13 +172,16 @@ def Build_model(sid_ang, success_num=1, mode="stair"):
         acad,
         f"ARRAY\nALL\n\nR\nCOL\n{columns}\nT\n{column_spacing}\nR\n{rows}\nT\n{row_spacing}\n0\nX\n",
     )
+    
+
     time.sleep(sleep_time)
     send_command_with_retry(acad, "Explode\nALL\n\n")
     send_command_with_retry(acad, "UNION\nALL\n\n")
-
+    
     light_source_length = 1
     actual_array_top = top + (rows - 1) * (top - bottom)
     array_center_y = (actual_array_top + bottom) / 2
+    #array_center_y = sid_ang[0]/2
     #print("TracePro rotation center:", 30, array_center_y, 0.5)
 
     start_point = APoint(100, array_center_y * scale, 0)
@@ -182,6 +194,7 @@ def Build_model(sid_ang, success_num=1, mode="stair"):
         r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\file\prism_sat_file0523-sim.sat"
     )
     dwg_file_path = r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\file\Drawing1.dwg"
+
     send_command_with_retry(acad, f"Export\n{sat_file_path}\ny\nALL\n\n")
     send_command_with_retry(acad, f"save\n{dwg_file_path}\ny\n")
 
