@@ -4,11 +4,15 @@
     (view:profiles "xy")
     (view:zoom-all)
 
+
     ;; 設定稜鏡材質
-    (do ((i 2 (+ i 1))) ((> i 2))
-      (edit:add-selection (entity i))
-      (property:apply-material (entity i) "SCHOTT" "BK7" (gvector 0 0 0))
-      (edit:clear-selection))
+    (property:apply-material (entity 2) "PLASTIC" "pmma" (gvector 0 0 0))
+    ;; (property:apply-material (entity 2) "SCHOTT" "BK7" (gvector 0 0 0))
+
+    ;; (do ((i 2 (+ i 1))) ((> i 2))
+      ;; (edit:add-selection (entity i))
+      ;; (property:apply-material (entity i) "SCHOTT" "BK7" (gvector 0 0 0))
+      ;; (edit:clear-selection))
 
     ;; 設定光源
     (edit:add-selection (tools:face-in-body 3 (entity 1)))
@@ -35,7 +39,7 @@
     (define center_x 0)
     (define center_y 13.2)
     (define center_z 0)
-    (define output_path "C:/Users/user/Desktop/NTHU/MasterThesis/GA/SGM_GA/file/output")
+    (define output_path "C:\\Users\\user\\Desktop\\NTHU\\MasterThesis\\GA\\SGM_GA\\file\\output\\")
 
     (do ((i (+ ini angle) (+ i angle))) ((> i end))
       (define angstr (number->string i)) ; <-- 修正這裡
@@ -46,8 +50,8 @@
       (let* (
         (bmp_path (string-append output_path "view-" angstr ".bmp"))
         (txt_path (string-append output_path "polar-" angstr ".txt"))
-        (polar_bmp (string-append output_path "PCD-" angstr ".bmp"))
-        (rect_bmp (string-append output_path "RCD-" angstr ".bmp"))
+        ;; (polar_bmp (string-append output_path "PCD-" angstr ".bmp"))
+        ;; (rect_bmp (string-append output_path "RCD-" angstr ".bmp"))
       )
 
         ;; 存檔命令
