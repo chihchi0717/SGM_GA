@@ -153,9 +153,11 @@ def Build_model(sid_ang, success_num=1, mode="stair"):
         acad, f"-BOUNDARY\n{round(Ix*scale,4)},{round(Iy*scale,4)}\n\n"
     )
     send_command_with_retry(acad, "_EXTRUDE\nL\n\n1\n")
+    
 
     rows, columns = 30, 1
-    row_spacing = (top - bottom) * scale * (rows - 1)
+    #row_spacing = (top - bottom) * scale * (rows - 1)
+    row_spacing = (sid_ang[0]) * scale * (rows - 1)
     column_spacing = 1
     send_command_with_retry(
         acad,
@@ -163,7 +165,8 @@ def Build_model(sid_ang, success_num=1, mode="stair"):
     )
     time.sleep(sleep_time)
     send_command_with_retry(acad, "Explode\nALL\n\n")
-
+    send_command_with_retry(acad, "UNION\nALL\n\n")
+    
     light_source_length = 1
     actual_array_top = top + (rows - 1) * (top - bottom)
     array_center_y = (actual_array_top + bottom) / 2
@@ -176,9 +179,9 @@ def Build_model(sid_ang, success_num=1, mode="stair"):
     )
 
     sat_file_path = (
-        r"C:\Users\cchih\Desktop\NTHU\MasterThesis\GA\file\prism_sat_file0523-sim.sat"
+        r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\file\prism_sat_file0523-sim.sat"
     )
-    dwg_file_path = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\GA\file\Drawing1.dwg"
+    dwg_file_path = r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\file\Drawing1.dwg"
     send_command_with_retry(acad, f"Export\n{sat_file_path}\ny\nALL\n\n")
     send_command_with_retry(acad, f"save\n{dwg_file_path}\ny\n")
 

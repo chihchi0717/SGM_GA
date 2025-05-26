@@ -9,7 +9,7 @@ def tracepro(population_number):
     warnings.simplefilter('ignore', category=UserWarning)
     
     '''檢查是否存在 start.OML 或 completion_signal.OML，進行相應操作'''
-    signal_file_path = "C:/Users/cchih/Desktop/NTHU/MasterThesis/GA/file/completion_signal.OML"
+    signal_file_path = "C:/Users/user/Desktop/NTHU/MasterThesis/GA/SGM_GA/file/completion_signal.OML"
 
     if os.path.exists(signal_file_path):
         os.remove(signal_file_path)
@@ -49,7 +49,7 @@ def tracepro(population_number):
     path = os.getcwd()
     w_handle1 = pywinauto.findwindows.find_windows(title=u'Select macro file to Load/Execute', class_name="#32770")[0]
     window1 = app.window(handle=w_handle1)
-    window1[u'檔案名稱(&N):Edit'].type_keys(r"" + path + "\GA_population\P" + str(j) + r"\Fin.scm")
+    window1[u'檔案名稱(&N):Edit'].type_keys(r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\Data\Sim.scm")
     time.sleep(sleep_time)
     window1[u'開啟(&O)Button'].click()
 
@@ -79,7 +79,7 @@ def tracepro(population_number):
         afxe.menu_item(u'&Macros->&Execute').select()
         w_handle1 = pywinauto.findwindows.find_windows(title=u'Select macro file to Load/Execute', class_name="#32770")[0]
         window1 = app.window(handle=w_handle1)
-        window1[u'檔案名稱(&N):Edit'].type_keys(r"" + path + "\Data\Reset.scm")
+        window1[u'檔案名稱(&N):Edit'].type_keys(r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\Data\Reset.scm")
         time.sleep(sleep_time)
         window1[u'開啟(&O)Button'].click()
     else:

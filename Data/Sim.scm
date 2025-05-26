@@ -1,11 +1,11 @@
 (define Macro1
   (lambda ()
-    (insert:part "C:/Users/cchih/Desktop/NTHU/MasterThesis/GA/file/prism_sat_file0523-sim.SAT")
+    (insert:part "C:/Users/user/Desktop/NTHU/MasterThesis/GA/SGM_GA/file/prism_sat_file0523-sim.SAT")
     (view:profiles "xy")
     (view:zoom-all)
 
     ;; 設定稜鏡材質
-    (do ((i 2 (+ i 1))) ((> i 61))
+    (do ((i 2 (+ i 1))) ((> i 2))
       (edit:add-selection (entity i))
       (property:apply-material (entity i) "SCHOTT" "BK7" (gvector 0 0 0))
       (edit:clear-selection))
@@ -35,7 +35,7 @@
     (define center_x 5)
     (define center_y 13)
     (define center_z 0)
-    (define output_path "C:/Users/cchih/Desktop/NTHU/MasterThesis/GA/file/output/")
+    (define output_path "C:/Users/user/Desktop/NTHU/MasterThesis/GA/SGM_GA/file/output")
 
     (do ((i (+ ini angle) (+ i angle))) ((> i end))
       (define angstr (number->string i)) ; <-- 修正這裡
@@ -59,7 +59,7 @@
     )
 
     ;; 完成標記
-    (file:save-as "C:/Users/cchih/Desktop/NTHU/MasterThesis/GA/file/completion_signal.OML")
+    (file:save-as "C:/Users/user/Desktop/NTHU/MasterThesis/GA/SGM_GA/file/completion_signal.OML")
   )
 )
 
