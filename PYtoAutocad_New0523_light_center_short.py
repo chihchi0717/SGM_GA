@@ -182,6 +182,17 @@ def Build_model(sid_ang, success_num=1, mode="stair"):
     light_source_length = 1
     actual_array_top = top + (rows - 1) * (top - bottom)
     array_center_y = (actual_array_top + bottom) / 2
+    # === Step: 儲存中心 y 座標 ===
+    center_y = array_center_y * scale
+    
+    with open("C:/Users/user/Desktop/NTHU/MasterThesis/GA/SGM_GA/file/center_y.txt", "w") as f:
+        f.write(str(center_y))
+
+    center_x = (Cx / 2) * scale
+    with open("C:/Users/user/Desktop/NTHU/MasterThesis/GA/SGM_GA/file/center_x.txt", "w") as f:
+        f.write(str(center_x))
+
+
     #array_center_y = sid_ang[0]/2
     #print("TracePro rotation center:", 30, array_center_y, 0.5)
 

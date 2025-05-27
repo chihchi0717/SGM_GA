@@ -56,4 +56,4 @@ def tracepro_fast(path_macro):
     return os.path.exists(signal)
 
 # 執行
-tracepro_fast(r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\Data\Sim.scm")
+# tracepro_fast(r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\Data\Sim.scm")

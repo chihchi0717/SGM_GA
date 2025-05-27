@@ -27,9 +27,9 @@ txtDir = path + "\\Data\\"
 '''高緯度 Final_run.scm'''
 #with open(txtDir+"Final_run.scm", "r") as f:
 '''低緯度 Fin.scm'''
-with open(txtDir+"Fin.scm", "r") as f:
+with open(txtDir+"Sim.scm", "r") as f:
     #old_folder = txtDir + "Final_run.scm"
-    old_folder = txtDir + "Fin.scm"
+    old_folder = txtDir + "Sim.scm"
     population = 100
     for i in range(population):
         new_folder = path + "\\GA_population\\P" + str(i+1)
