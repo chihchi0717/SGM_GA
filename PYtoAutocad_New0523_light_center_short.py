@@ -82,12 +82,13 @@ def Build_model(sid_ang, success_num=1, mode="stair"):
                 APoint(p2[0] * scale, p2[1] * scale),
             )
         center = ((A[0] + B[0] + C[0]) / 3, (A[1] + B[1] + C[1]) / 3)
-        send_command_with_retry(
-            acad,
-            f"-BOUNDARY\n{round(center[0]*scale, 4)},{round(center[1]*scale, 4)}\n\n",
-        )
+        # send_command_with_retry(
+        #     acad,
+        #     f"-BOUNDARY\n{round(center[0]*scale, 4)},{round(center[1]*scale, 4)}\n\n",
+        # )
         
-        send_command_with_retry(acad, "_EXTRUDE\nL\n\n1\n")
+        # send_command_with_retry(acad, "_EXTRUDE\nL\n\n1\n")
+        #send_command_with_retry(acad, "UNION\nALL\n\n")
 
     elif mode == "stair":
         top = (math.floor(equ_bc(0) / pixel_size)) * pixel_size
@@ -160,7 +161,7 @@ def Build_model(sid_ang, success_num=1, mode="stair"):
         acad, f"-BOUNDARY\n{round(Ix*scale,4)},{round(Iy*scale,4)}\n\n"
     )
     send_command_with_retry(acad, "_EXTRUDE\nL\n\n1\n")
-    send_command_with_retry(acad, "-BLOCK\nprism\n0,0,0\nL\n\n")
+    #send_command_with_retry(acad, "-BLOCK\nprism\n0,0,0\nL\n\n")
 
     send_command_with_retry(acad, "UNION\nALL\n\n")
 
@@ -203,5 +204,5 @@ def Build_model(sid_ang, success_num=1, mode="stair"):
 
 
 # Example usage
-sid_ang = [900, 5000, 64]
-Build_model(sid_ang, 1, "triangle")
+# sid_ang = [900, 5000, 64]
+# Build_model(sid_ang, 1, "triangle")
