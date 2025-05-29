@@ -12,7 +12,7 @@ N_GENERATIONS = 3
 CROSS_RATE = 0.6
 MUTATE_RATE = 0.1
 SIDE_BOUND = [400, 900]
-ANGLE_BOUND = [20, 160]
+ANGLE_BOUND = [1, 179]
 save_root = r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\GA_population"
 os.makedirs(save_root, exist_ok=True)
 
@@ -89,7 +89,7 @@ for g in range(N_GENERATIONS):
 
     fitness_values = np.array(fitness_values)
     best_idx = np.argmax(fitness_values)
-    print(f"★ Generation {g+1} 最佳個體為 P{best_idx+1}: {pop[best_idx]}, Fitness: {fitness_values[best_idx]}")
+    print(f"★ Generation {g+1} 最佳個體為 P{best_idx+1}: {pop[best_idx]}, Fitness: {fitness_values[best_idx]:.2f}")
 
     # === 產生下一代 ===
     selected = select(pop, fitness_values)

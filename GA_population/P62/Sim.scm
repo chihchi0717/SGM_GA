@@ -37,12 +37,12 @@
     (define angle 10) ; 每次增加的角度
     (define ini (- ang_ini angle))
     ;; 自動取得稜鏡模型 Y 軸中心
-    (define center_y_file (open-input-file "C:/Users/user/Desktop/NTHU/MasterThesis/GA/SGM_GA/file/center_y.txt"))
+    (define center_y_file (open-input-file "center_y.txt"))
     (define center_y (read center_y_file))
     (close-input-port center_y_file)
 
     ;; 讀取 center_x
-    (define center_x_file (open-input-file "C:/Users/user/Desktop/NTHU/MasterThesis/GA/SGM_GA/file/center_x.txt"))
+    (define center_x_file (open-input-file "center_x.txt"))
     (define center_x (read center_x_file))
     (close-input-port center_x_file)
 

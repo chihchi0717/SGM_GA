@@ -1,19 +1,7 @@
 import os
 import numpy as np
 
-# def read_txt_file(file_path):
-#     angles = []
-#     intensities = []
 
-#     with open(file_path, 'r') as file:
-#         lines = file.readlines()[2:]  # Skip headers
-#         for line in lines:
-#             parts = line.strip().split()
-#             if len(parts) >= 2:
-#                 angles.append(float(parts[0]))
-#                 intensities.append(float(parts[1]))
-
-#     return np.array(angles), np.array(intensities)
 def read_txt_file(file_path):
     try:
         data = []
@@ -69,35 +57,39 @@ def score_data(i):
     return score, avg, uni, std
 
 
-
 def evaluate_fitness(folder):
     """
-    計算一個資料夾中所有 polar-XX.txt 的總能量作為 Fitness。
+    根據 TracePro polar-XX.txt 格式計算：
+    efficiency = energy_up / total_energy，其中 energy_up 為角度 > 90° 且僅使用第一欄（0.0）
     """
     total_energy = 0
+    upward_energy = 0
+
     for angle in range(10, 90, 10):
         txt_path = os.path.join(folder, f"polar-{angle}.txt")
         try:
             with open(txt_path, "r") as f:
                 lines = f.readlines()
 
-            # 從第7行開始取數據 (index 6)，跳過表頭
-            data_lines = lines[6:]
-            angle_energy = 0
+            data_lines = lines[6:]  # 從第7行開始是數據
             for line in data_lines:
                 parts = line.strip().split()
                 if len(parts) < 2:
-                    continue  # 跳過空行或格式不正確的行
+                    continue
                 try:
-                    value = float(parts[1])  # 第二欄是強度
-                    angle_energy += value
+                    polar_angle = float(parts[0])
+                    intensity_col1 = float(parts[1])  # 使用第1欄（0.0 對應欄）
+                    total_energy += intensity_col1
+                    if polar_angle > 90:
+                        upward_energy += intensity_col1
                 except ValueError:
-                    continue  # 跳過不能轉成數字的欄位
-
-            total_energy += angle_energy
-
+                    continue
         except Exception as e:
             print(f"無法處理 {txt_path}: {e}")
             continue
 
-    return total_energy
+    if total_energy == 0:
+        return 0
+
+    efficiency = upward_energy / total_energy
+    return efficiency
