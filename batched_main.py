@@ -6,6 +6,12 @@ from PYtoAutocad_New0523_light_center_short import Build_model
 from TracePro_fast import tracepro_fast
 from txt_new import evaluate_fitness
 
+# Representation : Real-valued vector (S1, S2, A1)
+# Crossover : Uniform crossover
+# Mutation : Random change within bounds
+# Parents Selection : Roulette Wheel selection
+# Offsets Selection : (μ + λ) replacement
+
 # === 參數設定 ===
 POP_SIZE = 5
 N_GENERATIONS = 3
@@ -48,8 +54,6 @@ def crossover(p1, p2):
         return np.where(mask, p1, p2)
     return p1  # 不做 crossover 就保留原 parent
 
-    # mask = np.random.randint(0, 2, len(p1)).astype(bool)
-    # return np.where(mask, p1, p2)
 
 def mutate(child):
     for i in range(len(child)):

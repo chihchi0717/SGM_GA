@@ -112,4 +112,4 @@ def evaluate_fitness(folder, individual):
         print(f"⚠️ 製程品質評估失敗: {e}")
         process_score = 1.0
 
-    return efficiency * process_score
+    return efficiency * (1/(1 + process_score))
