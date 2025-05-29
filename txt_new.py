@@ -68,7 +68,7 @@ def score_data(i):
 
     return score, avg, uni, std
 
-import os
+
 
 def evaluate_fitness(folder):
     """
@@ -101,4 +101,3 @@ def evaluate_fitness(folder):
             continue
 
     return total_energy
-
