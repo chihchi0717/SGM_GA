@@ -1,6 +1,6 @@
 (define Macro1
   (lambda ()
-    (insert:part "C:/Users/user/Desktop/NTHU/MasterThesis/GA/SGM_GA/file/prism_sat_file0523-sim.SAT")
+    (insert:part "prism_sat_file0523-sim.SAT")
     (view:profiles "xy")
     (view:zoom-all)
 

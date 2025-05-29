@@ -7,6 +7,7 @@ import sys
 import warnings
 from pyautocad import Autocad, APoint
 import comtypes
+import os
 
 sys.stdout.reconfigure(encoding="utf-8")
 warnings.simplefilter("ignore", UserWarning)
@@ -36,7 +37,14 @@ def send_command_with_retry(acad, command, retries=5, delay=2):
         raise RuntimeError(f"Failed to execute command after retries: {command}")
 
 
-def Build_model(sid_ang, mode="stair"):
+def Build_model(sid_ang, mode="stair", folder="."):
+    
+    # 設定檔名
+    sat_path = os.path.join(folder, "prism_sat_file0523-sim.SAT")
+    scm_path = os.path.join(folder, "Sim.scm")
+    center_y_path = os.path.join(folder, "center_y.txt")
+    center_x_path = os.path.join(folder, "center_x.txt")
+
     start_time = time.time()
     sleep_time = 0.2
     scale = 0.001
@@ -209,13 +217,17 @@ def Build_model(sid_ang, mode="stair"):
     # === Step: 儲存中心 y 座標 ===
     center_y = array_center_y * scale
     
-    with open(r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\file\center_y.txt", "w") as f:
-        f.write(str(center_y))
+    # with open(r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\file\center_y.txt", "w") as f:
+    #     f.write(str(center_y))
 
     center_x = (Cx / 2) * scale
-    with open(r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\file\center_x.txt", "w") as f:
+    # with open(r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\file\center_x.txt", "w") as f:
+    #     f.write(str(center_x))
+    # 儲存 center_y 和 center_x
+    with open(center_y_path, "w") as f:
+        f.write(str(center_y))
+    with open(center_x_path, "w") as f:
         f.write(str(center_x))
-
 
     #array_center_y = sid_ang[0]/2
     #print("TracePro rotation center:", 30, array_center_y, 0.5)
@@ -226,9 +238,8 @@ def Build_model(sid_ang, mode="stair"):
         f"_BOX\n{start_point.x},{start_point.y},{start_point.z}\n{start_point.x + light_source_length + 0.6},{start_point.y + light_source_length + 0.6},{start_point.z + light_source_length}\n",
     )
 
-    sat_file_path = (
-        r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\file\prism_sat_file0523-sim.sat"
-    )
+    sat_file_path = (sat_path)
+    
     dwg_file_path = r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\file\Drawing1.dwg"
 
     send_command_with_retry(acad, f"Export\n{sat_file_path}\ny\nALL\n\n")

@@ -1,7 +1,7 @@
 import math as m
 
 def draw_tri(sid, ang):
-    import math as m
+    
 
     S1, S2 = sid
     A1 = ang[0]  # degrees
