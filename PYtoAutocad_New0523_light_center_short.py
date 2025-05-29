@@ -36,9 +36,9 @@ def send_command_with_retry(acad, command, retries=5, delay=2):
         raise RuntimeError(f"Failed to execute command after retries: {command}")
 
 
-def Build_model(sid_ang, success_num=1, mode="stair"):
+def Build_model(sid_ang, mode="stair"):
     start_time = time.time()
-    sleep_time = 0.1
+    sleep_time = 0.2
     scale = 0.001
 
     side_a, side_b, angle_B = sid_ang
@@ -70,6 +70,30 @@ def Build_model(sid_ang, success_num=1, mode="stair"):
     time.sleep(sleep_time)
     acad.ActiveDocument.SendCommand("-UNITS\n2\n4\n1\n4\n0\nY\n\n")
     time.sleep(sleep_time)
+    # acad = retry_autocad_call(lambda: Autocad(create_if_not_exists=True))
+
+    # # 等待 AutoCAD 準備好 ActiveDocument
+    # def wait_for_active_doc(acad, retries=20, delay=0.5):
+    #     for attempt in range(retries):
+    #         try:
+    #             doc = acad.app.Documents.Add()
+    #             # 呼叫一次 ActiveDocument 檢查是否準備好
+    #             _ = acad.ActiveDocument
+    #             return doc
+    #         except Exception as e:
+    #             print(f"⚠️ 等待 ActiveDocument 開啟中（第 {attempt + 1} 次）: {e}")
+    #             time.sleep(delay)
+    #     raise RuntimeError("❌ 無法取得 ActiveDocument，AutoCAD 可能未正常開啟。")
+
+    # wait_for_active_doc(acad)
+
+    # 設定單位
+    try:
+        acad.ActiveDocument.SendCommand("-UNITS\n2\n4\n1\n4\n0\nY\n\n")
+        time.sleep(sleep_time)
+    except Exception as e:
+        print(f"⚠️ 設定 UNITS 命令失敗：{e}")
+        raise
 
     if mode == "triangle":
         # top = sid_ang[0]
@@ -185,11 +209,11 @@ def Build_model(sid_ang, success_num=1, mode="stair"):
     # === Step: 儲存中心 y 座標 ===
     center_y = array_center_y * scale
     
-    with open("C:/Users/user/Desktop/NTHU/MasterThesis/GA/SGM_GA/file/center_y.txt", "w") as f:
+    with open(r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\file\center_y.txt", "w") as f:
         f.write(str(center_y))
 
     center_x = (Cx / 2) * scale
-    with open("C:/Users/user/Desktop/NTHU/MasterThesis/GA/SGM_GA/file/center_x.txt", "w") as f:
+    with open(r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\file\center_x.txt", "w") as f:
         f.write(str(center_x))
 
 
@@ -209,11 +233,17 @@ def Build_model(sid_ang, success_num=1, mode="stair"):
 
     send_command_with_retry(acad, f"Export\n{sat_file_path}\ny\nALL\n\n")
     send_command_with_retry(acad, f"save\n{dwg_file_path}\ny\n")
+    try:
+        send_command_with_retry(acad, "close\n")
+        time.sleep(2)
+    except Exception as e:
+        print(f"⚠️ 嘗試關閉 AutoCAD 檔案時出錯：{e}")
+
 
     print("Execution time:", round(time.time() - start_time, 2), "sec")
     return 1
 
 
-# Example usage
+#Example usage
 # sid_ang = [900, 5000, 64]
 # Build_model(sid_ang, 1, "triangle")

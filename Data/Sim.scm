@@ -49,7 +49,7 @@
     (define center_z 0)
 
 
-    (define output_path "C:\\Users\\user\\Desktop\\NTHU\\MasterThesis\\GA\\SGM_GA\\file\\output\\")
+    (define output_path "./")
 
     (do ((i (+ ini angle) (+ i angle))) ((> i end))
       (define angstr (number->string i)) ; <-- 修正這裡
