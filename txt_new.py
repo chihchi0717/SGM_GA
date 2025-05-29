@@ -57,11 +57,24 @@ def score_data(i):
     return score, avg, uni, std
 
 
-def evaluate_fitness(folder):
-    """
-    根據 TracePro polar-XX.txt 格式計算：
-    efficiency = energy_up / total_energy，其中 energy_up 為角度 > 90° 且僅使用第一欄（0.0）
-    """
+def compute_regression_score(S1, S2, A1):
+    S1 = S1 / 1000 
+    S2 = S2 / 1000
+    return (
+        -0.067 +
+        0.217 * S1 +
+        0.275 * S2 +
+        0.002 * A1 -
+        0.506 * S1 * S2 -
+        0.002 * S1 * A1 -
+        0.002 * S2 * A1 +
+        0.004 * S1 * S2 * A1
+    )
+
+
+def evaluate_fitness(folder, individual):
+    S1, S2, A1 = individual  # unpack 個體參數
+
     total_energy = 0
     upward_energy = 0
 
@@ -71,14 +84,14 @@ def evaluate_fitness(folder):
             with open(txt_path, "r") as f:
                 lines = f.readlines()
 
-            data_lines = lines[6:]  # 從第7行開始是數據
+            data_lines = lines[6:]
             for line in data_lines:
                 parts = line.strip().split()
                 if len(parts) < 2:
                     continue
                 try:
                     polar_angle = float(parts[0])
-                    intensity_col1 = float(parts[1])  # 使用第1欄（0.0 對應欄）
+                    intensity_col1 = float(parts[1])
                     total_energy += intensity_col1
                     if polar_angle > 90:
                         upward_energy += intensity_col1
@@ -92,4 +105,11 @@ def evaluate_fitness(folder):
         return 0
 
     efficiency = upward_energy / total_energy
-    return efficiency
+
+    try:
+        process_score = compute_regression_score(S1, S2, A1)
+    except Exception as e:
+        print(f"⚠️ 製程品質評估失敗: {e}")
+        process_score = 1.0
+
+    return efficiency * process_score

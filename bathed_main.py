@@ -80,7 +80,9 @@ for g in range(N_GENERATIONS):
     for i in range(POP_SIZE):
         folder = os.path.join(save_root, f"P{i+1}")
         try:
-            fitness = evaluate_fitness(folder)
+            #fitness = evaluate_fitness(folder)
+            fitness = evaluate_fitness(folder, individual)
+
         except Exception as e:
             print(f"⚠️ P{i+1} 評估錯誤: {e}")
             fitness = 0.01
