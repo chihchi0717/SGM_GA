@@ -220,7 +220,7 @@ def Build_model(sid_ang, mode="stair", folder="."):
     # with open(r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\file\center_y.txt", "w") as f:
     #     f.write(str(center_y))
 
-    center_x = (Cx / 2) * scale
+    center_x = (Cx) * scale
     # with open(r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\file\center_x.txt", "w") as f:
     #     f.write(str(center_x))
     # 儲存 center_y 和 center_x

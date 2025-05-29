@@ -43,8 +43,13 @@ def select(pop, fitness):
     return pop[idx]
 
 def crossover(p1, p2):
-    mask = np.random.randint(0, 2, len(p1)).astype(bool)
-    return np.where(mask, p1, p2)
+    if np.random.rand() < CROSS_RATE:
+        mask = np.random.randint(0, 2, len(p1)).astype(bool)
+        return np.where(mask, p1, p2)
+    return p1  # 不做 crossover 就保留原 parent
+
+    # mask = np.random.randint(0, 2, len(p1)).astype(bool)
+    # return np.where(mask, p1, p2)
 
 def mutate(child):
     for i in range(len(child)):
