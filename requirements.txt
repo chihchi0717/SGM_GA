@@ -1,0 +1,7 @@
+numpy>=1.24
+matplotlib>=3.7
+opencv-python>=4.8
+pyautocad>=0.4
+comtypes>=1.1
+pywinauto>=0.6
+
