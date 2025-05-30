@@ -76,24 +76,6 @@ def Build_model(sid_ang, mode="stair", folder="."):
     acad = retry_autocad_call(lambda: Autocad(create_if_not_exists=True))
     acad.app.Documents.Add()
     time.sleep(sleep_time)
-    acad.ActiveDocument.SendCommand("-UNITS\n2\n4\n1\n4\n0\nY\n\n")
-    time.sleep(sleep_time)
-    # acad = retry_autocad_call(lambda: Autocad(create_if_not_exists=True))
-
-    # # 等待 AutoCAD 準備好 ActiveDocument
-    # def wait_for_active_doc(acad, retries=20, delay=0.5):
-    #     for attempt in range(retries):
-    #         try:
-    #             doc = acad.app.Documents.Add()
-    #             # 呼叫一次 ActiveDocument 檢查是否準備好
-    #             _ = acad.ActiveDocument
-    #             return doc
-    #         except Exception as e:
-    #             print(f"⚠️ 等待 ActiveDocument 開啟中（第 {attempt + 1} 次）: {e}")
-    #             time.sleep(delay)
-    #     raise RuntimeError("❌ 無法取得 ActiveDocument，AutoCAD 可能未正常開啟。")
-
-    # wait_for_active_doc(acad)
 
     # 設定單位
     try:
@@ -220,7 +202,7 @@ def Build_model(sid_ang, mode="stair", folder="."):
     # with open(r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\file\center_y.txt", "w") as f:
     #     f.write(str(center_y))
 
-    center_x = (Cx) * scale
+    center_x = (Cx) * scale + 1
     # with open(r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\file\center_x.txt", "w") as f:
     #     f.write(str(center_x))
     # 儲存 center_y 和 center_x
@@ -251,7 +233,7 @@ def Build_model(sid_ang, mode="stair", folder="."):
         print(f"⚠️ 嘗試關閉 AutoCAD 檔案時出錯：{e}")
 
 
-    print("Execution time:", round(time.time() - start_time, 2), "sec")
+    print("Autocad Execution time:", round(time.time() - start_time, 2), "sec")
     return 1
 
 

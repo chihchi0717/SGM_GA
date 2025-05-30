@@ -45,14 +45,14 @@ def tracepro_fast(path_macro):
     start_time = time.time()
 
     if wait_file(signal):
-        print("模擬完成")
+        #print("模擬完成")
         time.sleep(0.1)
         load_macro(app, reset_path)
-        print("已執行 Reset.scm 初始化")
+        #print("已執行 Reset.scm 初始化")
     else:
         print("超時未完成")
 
-    print("Execution time:", round(time.time() - start_time, 2), "sec")
+    print("Tracepro Execution time:", round(time.time() - start_time, 2), "sec")
     return os.path.exists(signal)
 
 # 執行

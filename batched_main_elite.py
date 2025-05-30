@@ -10,7 +10,7 @@ from txt_new import evaluate_fitness
 # Crossover : Uniform crossover
 # Mutation : Random change within bounds
 # Parents Selection : Roulette Wheel selection
-# Offsets Selection : (μ + λ) replacement
+# Offsets Selection : (μ + λ) replacement, remain top
 # fitness : efficiency * (1/(1 + process_score))
 
 # 參數設定
