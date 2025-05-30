@@ -21,9 +21,9 @@ MUTATE_RATE = 0.1
 SIDE_BOUND = [400, 1000]
 ANGLE_BOUND = [1, 179]
 save_root = r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\GA_population"
-
+onedrive_root = r"C:\Users\user\OneDrive - NTHU\home"
 os.makedirs(save_root, exist_ok=True)
-fitness_log_path = os.path.join(save_root, "fitness_log.csv")
+fitness_log_path = os.path.join(onedrive_root, "fitness_log.csv")
 
 # === 工具函式 ===
 def generate_valid_population(n):
@@ -79,39 +79,39 @@ def load_fitness_log():
 
 def save_fitness_log(fitness_log):
     with open(fitness_log_path, mode="w", newline="") as f:
-        fieldnames = ["a", "b", "A", "fitness", "generation"]
+        fieldnames = ["S1", "S2", "A1", "fitness", "generation"]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for row in fitness_log:
             writer.writerow(row)
 
 def check_if_evaluated(fitness_log, individual):
-    a, b, A = map(str, individual)
+    S1, S2, A1 = map(str, individual)
     for row in fitness_log:
-        if row["a"] == a and row["b"] == b and row["A"] == A:
+        if row["S1"] == S1 and row["S2"] == S2 and row["A1"] == A1:
             return True, float(row["fitness"])
     return False, None
 
 def append_fitness(fitness_log, individual, fitness, generation):
-    a, b, A = map(str, individual)
+    S1, S2, A1 = map(str, individual)
     
     fitness_log.append({
-        "a": a,
-        "b": b,
-        "A": A,
+        "S1": S1,
+        "S2": S2,
+        "A1": A1,
         "fitness": str(fitness),
         "generation": str(generation)
     })
     save_fitness_log(fitness_log)
 
-    a, b, A = map(str, individual)
+    S1, S2, A1 = map(str, individual)
     for row in fitness_log:
-        if row["a"] == a and row["b"] == b and row["A"] == A:
+        if row["S1"] == S1 and row["S2"] == S2 and row["A1"] == A1:
             return
     fitness_log.append({
-        "a": a,
-        "b": b,
-        "A": A,
+        "S1": S1,
+        "S2": S2,
+        "A1": A1,
         "fitness": str(fitness),
         "generation": str(generation)
     })
