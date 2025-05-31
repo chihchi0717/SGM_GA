@@ -2,7 +2,7 @@ import os
 import numpy as np
 import random
 from draw_New import draw_
-from PYtoAutocad_New0523_light_center_short import Build_model
+from PYtoAutocad import Build_model
 from TracePro_fast import tracepro_fast
 from txt_new import evaluate_fitness
 import csv
