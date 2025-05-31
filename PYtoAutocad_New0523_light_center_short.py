@@ -40,8 +40,8 @@ def send_command_with_retry(acad, command, retries=5, delay=2):
 def Build_model(sid_ang, mode="stair", folder="."):
     
     # 設定檔名
-    sat_path = os.path.join(folder, "prism_sat_file0523-sim.SAT")
-    scm_path = os.path.join(folder, "Sim.scm")
+    sat_path = os.path.join(folder, "prism_sat_file-sim.SAT")
+    dwg_path = os.path.join(folder, "Drawing.dwg")
     center_y_path = os.path.join(folder, "center_y.txt")
     center_x_path = os.path.join(folder, "center_x.txt")
 
@@ -222,7 +222,7 @@ def Build_model(sid_ang, mode="stair", folder="."):
 
     sat_file_path = (sat_path)
     
-    dwg_file_path = r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\file\Drawing1.dwg"
+    dwg_file_path = (dwg_path)
 
     send_command_with_retry(acad, f"Export\n{sat_file_path}\ny\nALL\n\n")
     send_command_with_retry(acad, f"save\n{dwg_file_path}\ny\n")

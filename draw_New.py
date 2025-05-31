@@ -2,7 +2,6 @@ import math as m
 
 def draw_tri(sid, ang):
     
-
     S1, S2 = sid
     A1 = ang[0]  # degrees
     rad = 180 / m.pi

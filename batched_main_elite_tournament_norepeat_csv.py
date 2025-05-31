@@ -20,9 +20,15 @@ CROSS_RATE = 0.6
 MUTATE_RATE = 0.1
 SIDE_BOUND = [400, 1000]
 ANGLE_BOUND = [1, 179]
-save_root = r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\GA_population"
+
+# 取得此檔案所在資料夾的絕對路徑
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# 專案根目錄（假設此檔案就放在專案根目錄下）
+PROJECT_ROOT = BASE_DIR
 onedrive_root = r"C:\Users\user\OneDrive - NTHU\home"
-os.makedirs(save_root, exist_ok=True)
+# 相對路徑
+save_root       = os.path.join(PROJECT_ROOT, "GA_population")
 fitness_log_path = os.path.join(onedrive_root, "fitness_log.csv")
 
 # === 工具函式 ===

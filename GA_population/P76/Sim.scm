@@ -1,6 +1,6 @@
 (define Macro1
   (lambda ()
-    (insert:part "prism_sat_file0523-sim.SAT")
+    (insert:part "prism_sat_file-sim.SAT")
     (view:profiles "xy")
     (view:zoom-all)
 
@@ -73,7 +73,8 @@
     )
 
     ;; 完成標記
-    (file:save-as "C:/Users/user/Desktop/NTHU/MasterThesis/GA/SGM_GA/file/completion_signal.OML")
+    ;; (file:save-as "C:/Users/user/Desktop/NTHU/MasterThesis/GA/SGM_GA/file/completion_signal.OML")
+    (file:save-as "../../file/completion_signal.OML")
   )
 )
 

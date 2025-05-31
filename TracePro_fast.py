@@ -1,6 +1,15 @@
 from pywinauto import application, findwindows
 import time, os
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+signal = os.path.join(BASE_DIR, "file", "completion_signal.OML")
+reset_path = os.path.join(BASE_DIR, "Data", "Reset.scm")
+# print("== BASE_DIR:", BASE_DIR)
+# print("== signal full path:", signal)
+# print("== reset_path full path:", reset_path)
+# print("== exists signal?", os.path.exists(signal))
+# print("== exists reset_path?", os.path.exists(reset_path))
+
 def wait_file(path, timeout=60):
     start = time.time()
     while not os.path.exists(path):
@@ -22,12 +31,14 @@ def load_macro(app, path_macro):
     macro_win[u'開啟(&O)Button'].click()
 
 def tracepro_fast(path_macro):
-    signal = r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\file\completion_signal.OML"
-    reset_path = r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\Data\Reset.scm"
-
+    
     if os.path.exists(signal):
         os.remove(signal)
 
+    # TRACEPRO_EXE = os.environ.get("TRACEPRO_PATH",
+    #     r"C:\Program Files (x86)\Lambda Research Corporation\TracePro\TracePro.exe"
+    # )
+    #app = application.Application().connect(path=TRACEPRO_EXE)
     app = application.Application().connect(path=r"C:\Program Files (x86)\Lambda Research Corporation\TracePro\TracePro.exe")
     win = app.window(title_re=".*TracePro.*")
     win.wait('ready')
