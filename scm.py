@@ -21,7 +21,7 @@ def mkdir(path):
         print(path+'目錄已存在')
 
 path = os.getcwd()
-txtDir = path + "\\Data\\" 
+txtDir = path + "\\Macro\\" 
 
 '''複製 Macro 檔至 GA_population 資料夾'''
 '''高緯度 Final_run.scm'''

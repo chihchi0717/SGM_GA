@@ -73,7 +73,7 @@
     )
 
     ;; 完成標記
-    (file:save-as "../../file/completion_signal.OML")
+    (file:save-as "../../Macro/completion_signal.OML")
   )
 )
 

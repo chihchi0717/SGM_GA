@@ -2,8 +2,8 @@ from pywinauto import application, findwindows
 import time, os
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-signal = os.path.join(BASE_DIR, "file", "completion_signal.OML")
-reset_path = os.path.join(BASE_DIR, "Data", "Reset.scm")
+signal = os.path.join(BASE_DIR, "Macro", "completion_signal.OML")
+reset_path = os.path.join(BASE_DIR, "Macro", "Reset.scm")
 # print("== BASE_DIR:", BASE_DIR)
 # print("== signal full path:", signal)
 # print("== reset_path full path:", reset_path)

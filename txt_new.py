@@ -71,7 +71,6 @@ def compute_regression_score(S1, S2, A1):
         0.004 * S1 * S2 * A1
     )
 
-
 def evaluate_fitness(folder, individual):
     S1, S2, A1 = individual  # unpack 個體參數
 
@@ -105,11 +104,11 @@ def evaluate_fitness(folder, individual):
         return 0
 
     efficiency = upward_energy / total_energy
-
     try:
         process_score = compute_regression_score(S1, S2, A1)
     except Exception as e:
         print(f"⚠️ 製程品質評估失敗: {e}")
         process_score = 1.0
 
-    return efficiency * (1/(1 + process_score))
+    fitness = efficiency * (1 / (1 + process_score))
+    return fitness, efficiency, process_score

@@ -73,8 +73,7 @@
     )
 
     ;; 完成標記
-    ;; (file:save-as "C:/Users/user/Desktop/NTHU/MasterThesis/GA/SGM_GA/file/completion_signal.OML")
-    (file:save-as "../../file/completion_signal.OML")
+    (file:save-as "../../Macro/completion_signal.OML")
   )
 )
 
