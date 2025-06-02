@@ -1,6 +1,13 @@
 from pywinauto import application, findwindows
 import time, os
 
+import warnings
+
+warnings.filterwarnings(
+    "ignore",
+    message=".*32-bit application should be automated.*"
+)
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 signal = os.path.join(BASE_DIR, "Macro", "completion_signal.OML")
 reset_path = os.path.join(BASE_DIR, "Macro", "Reset.scm")
@@ -63,7 +70,7 @@ def tracepro_fast(path_macro):
     else:
         print("超時未完成")
 
-    print("Tracepro Execution time:", round(time.time() - start_time, 2), "sec")
+    #print("Tracepro Execution time:", round(time.time() - start_time, 2), "sec")
     return os.path.exists(signal)
 
 # 執行

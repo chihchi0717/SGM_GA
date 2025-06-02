@@ -235,7 +235,7 @@ def Build_model(sid_ang, mode="stair", folder="."):
         print(f"⚠️ 嘗試關閉 AutoCAD 檔案時出錯：{e}")
 
 
-    print("Autocad Execution time:", round(time.time() - start_time, 2), "sec")
+    #print("Autocad Execution time:", round(time.time() - start_time, 2), "sec")
     return 1
 
 
