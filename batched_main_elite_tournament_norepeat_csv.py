@@ -83,17 +83,22 @@ def load_fitness_log():
         reader = csv.DictReader(f)
         return list(reader)
 
-# def save_fitness_log(fitness_log):
-#     with open(fitness_log_path, mode="w", newline="") as f:
-#         fieldnames = ["S1", "S2", "A1", "fitness", "generation"]
-#         writer = csv.DictWriter(f, fieldnames=fieldnames)
-#         writer.writeheader()
-#         for row in fitness_log:
-#             writer.writerow(row)
-
 def save_fitness_log(fitness_log):
     with open(fitness_log_path, mode="w", newline="") as f:
-        fieldnames = ["S1", "S2", "A1", "fitness", "efficiency", "process_score", "generation"]
+        # fieldnames = ["S1", "S2", "A1", "fitness", "efficiency", "process_score", "generation"]
+        fieldnames = ["S1", "S2", "A1", "fitness", "efficiency", "process_score", "generation"] + \
+             [f"eff_{angle}" for angle in range(10, 90, 10)]
+
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in fitness_log:
+            writer.writerow(row)
+
+def save_fitness_log_backup(fitness_log, generation):
+    backup_path = os.path.join(onedrive_root, f"generation_{generation}.csv")
+    fieldnames = ["S1", "S2", "A1", "fitness", "efficiency", "process_score", "generation"] + \
+                 [f"eff_{angle}" for angle in range(10, 90, 10)]
+    with open(backup_path, mode="w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for row in fitness_log:
@@ -103,12 +108,16 @@ def check_if_evaluated(fitness_log, individual):
     S1, S2, A1 = map(str, individual)
     for row in fitness_log:
         if row["S1"] == S1 and row["S2"] == S2 and row["A1"] == A1:
-            return True, float(row["fitness"])
+            fitness = float(row["fitness"])
+            efficiency = float(row["efficiency"])
+            process_score = float(row["process_score"])
+            angle_effs = [float(row.get(f"eff_{angle}", 0)) for angle in range(10, 90, 10)]
+            return True, (fitness, efficiency, process_score, angle_effs)
     return False, None
 
-def append_fitness(fitness_log, individual, fitness, efficiency, process_score, generation):
+def append_fitness(fitness_log, individual, fitness, efficiency, process_score, generation, angle_effs=None):
     S1, S2, A1 = map(str, individual)
-    fitness_log.append({
+    row = {
         "S1": S1,
         "S2": S2,
         "A1": A1,
@@ -116,8 +125,15 @@ def append_fitness(fitness_log, individual, fitness, efficiency, process_score, 
         "efficiency": str(efficiency),
         "process_score": str(process_score),
         "generation": str(generation)
-    })
+    }
+
+    if angle_effs:
+        for angle, eff in zip(range(10, 90, 10), angle_effs):
+            row[f"eff_{angle}"] = str(eff)
+
+    fitness_log.append(row)
     save_fitness_log(fitness_log)
+
 
 # === 初始化族群 ===
 pop = generate_valid_population(POP_SIZE)
@@ -152,22 +168,23 @@ for g in range(N_GENERATIONS):
     fitness_values = []
     for i, individual in enumerate(pop):
         folder = os.path.join(save_root, f"P{i+1}")
-        is_evaluated, existing_fitness = check_if_evaluated(fitness_log, individual)
+        is_evaluated, eval_data = check_if_evaluated(fitness_log, individual)
 
         if is_evaluated:
-            fitness = existing_fitness
-            print(f"📄 讀取已存在的 fitness P{i+1}: {fitness:.2f}")
-            append_fitness(fitness_log, individual, fitness, efficiency, process_score, g + 1)
-            # append_fitness(fitness_log, individual, fitness, g + 1)
+            fitness, efficiency, process_score, angle_effs = eval_data
+            print(f"📄 讀取已存在的 fitness P{i+1}: {fitness:.4f}")
+            append_fitness(fitness_log, individual, fitness, efficiency, process_score, g + 1, angle_effs)
         else:
             try:
-                fitness, efficiency, process_score = evaluate_fitness(folder, individual)
+                fitness, efficiency, process_score, angle_effs = evaluate_fitness(folder, individual)
                 print(f"📊 評估完成 P{i+1}: {fitness:.4f} (eff: {efficiency:.4f}, proc: {process_score:.4f})")
             except Exception as e:
                 print(f"⚠️ P{i+1} 評估錯誤: {e}")
-                fitness, efficiency, process_score = 0.01, 0.0, 1.0
+                fitness, efficiency, process_score, angle_effs = 0.01, 0.0, 1.0, [0]*8
 
-            append_fitness(fitness_log, individual, fitness, efficiency, process_score, g + 1)
+            append_fitness(fitness_log, individual, fitness, efficiency, process_score, g + 1, angle_effs)
+
+            # append_fitness(fitness_log, individual, fitness, efficiency, process_score, g + 1)
 
         fitness_values.append(fitness)
         print(f"P{i+1} pop[i]: {pop[i]}")
@@ -188,5 +205,6 @@ for g in range(N_GENERATIONS):
         next_gen.append(child)
 
     pop = np.array(next_gen)
+    save_fitness_log_backup(fitness_log, g+1) 
 
 print("所有世代完成")

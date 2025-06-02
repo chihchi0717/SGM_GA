@@ -1,7 +1,6 @@
 import os
 import numpy as np
 
-
 def read_txt_file(file_path):
     try:
         data = []
@@ -72,12 +71,12 @@ def compute_regression_score(S1, S2, A1):
     )
 
 def evaluate_fitness(folder, individual):
-    S1, S2, A1 = individual  # unpack 個體參數
+    S1, S2, A1 = individual
 
     weighted_efficiency_total = 0
     weight_sum = 0
+    efficiencies_per_angle = []  # 新增儲存各角度效率
 
-    # 對應角度10~80的權重，順序要與 range(10, 90, 10) 對齊
     weights = [1, 2, 5, 7, 5, 8.5, 1.5, 2]
 
     for idx, angle in enumerate(range(10, 90, 10)):
@@ -104,19 +103,23 @@ def evaluate_fitness(folder, individual):
                     continue
 
             if total_energy > 0:
-                efficiency = upward_energy / total_energy
-                weight = weights[idx]
-                weighted_efficiency_total += efficiency * weight
-                weight_sum += weight
+                eff = upward_energy / total_energy
+            else:
+                eff = 0.0
+
+            efficiencies_per_angle.append(eff)
+            weighted_efficiency_total += eff * weights[idx]
+            weight_sum += weights[idx]
 
         except Exception as e:
             print(f"無法處理 {txt_path}: {e}")
+            efficiencies_per_angle.append(0.0)
             continue
 
     if weight_sum == 0:
-        return 0
-
-    efficiency = weighted_efficiency_total / weight_sum
+        efficiency = 0
+    else:
+        efficiency = weighted_efficiency_total / weight_sum
 
     try:
         process_score = compute_regression_score(S1, S2, A1)
@@ -125,5 +128,7 @@ def evaluate_fitness(folder, individual):
         process_score = 1.0
 
     fitness = efficiency * (1 / (1 + process_score))
-    return fitness, efficiency, process_score
+
+    return fitness, efficiency, process_score, efficiencies_per_angle
+
 
