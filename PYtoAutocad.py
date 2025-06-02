@@ -74,7 +74,9 @@ def Build_model(sid_ang, mode="stair", folder="."):
     
 
     acad = retry_autocad_call(lambda: Autocad(create_if_not_exists=True))
-    acad.app.Documents.Add()
+    #acad.app.Documents.Add()
+    retry_autocad_call(lambda: acad.app.Documents.Add())
+
     time.sleep(sleep_time)
 
     # 設定單位

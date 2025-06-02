@@ -14,7 +14,7 @@ import csv
 # fitness : efficiency * (1/(1 + process_score))
 
 # === GA參數設定 ===
-POP_SIZE = 5
+POP_SIZE = 5 
 N_GENERATIONS = 3
 CROSS_RATE = 0.6
 MUTATE_RATE = 0.1
@@ -149,7 +149,13 @@ for g in range(N_GENERATIONS):
         is_evaluated, _ = check_if_evaluated(fitness_log, individual)
         if not is_evaluated:
             print(f"🔧 建模個體 P{i+1}")
-            Build_model(individual, mode="triangle", folder=folder)
+            #Build_model(individual, mode="triangle", folder=folder)
+            try:
+                Build_model(individual, mode="triangle", folder=folder)
+            except Exception as e:
+                print(f"❌ AutoCAD 建模失敗：個體 {individual}，錯誤：{e}")
+                continue  # 或用預設 fitness 處理
+
         else:
             print(f"⏩ 已建模過的個體 P{i+1},{individual}，跳過")
 
