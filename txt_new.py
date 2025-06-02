@@ -74,16 +74,22 @@ def compute_regression_score(S1, S2, A1):
 def evaluate_fitness(folder, individual):
     S1, S2, A1 = individual  # unpack 個體參數
 
-    total_energy = 0
-    upward_energy = 0
+    weighted_efficiency_total = 0
+    weight_sum = 0
 
-    for angle in range(10, 90, 10):
+    # 對應角度10~80的權重，順序要與 range(10, 90, 10) 對齊
+    weights = [1, 2, 5, 7, 5, 8.5, 1.5, 2]
+
+    for idx, angle in enumerate(range(10, 90, 10)):
         txt_path = os.path.join(folder, f"polar-{angle}.txt")
         try:
             with open(txt_path, "r") as f:
                 lines = f.readlines()
 
             data_lines = lines[6:]
+            total_energy = 0
+            upward_energy = 0
+
             for line in data_lines:
                 parts = line.strip().split()
                 if len(parts) < 2:
@@ -96,14 +102,22 @@ def evaluate_fitness(folder, individual):
                         upward_energy += intensity_col1
                 except ValueError:
                     continue
+
+            if total_energy > 0:
+                efficiency = upward_energy / total_energy
+                weight = weights[idx]
+                weighted_efficiency_total += efficiency * weight
+                weight_sum += weight
+
         except Exception as e:
             print(f"無法處理 {txt_path}: {e}")
             continue
 
-    if total_energy == 0:
+    if weight_sum == 0:
         return 0
 
-    efficiency = upward_energy / total_energy
+    efficiency = weighted_efficiency_total / weight_sum
+
     try:
         process_score = compute_regression_score(S1, S2, A1)
     except Exception as e:
@@ -112,3 +126,4 @@ def evaluate_fitness(folder, individual):
 
     fitness = efficiency * (1 / (1 + process_score))
     return fitness, efficiency, process_score
+
