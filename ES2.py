@@ -2,19 +2,18 @@ import os
 import numpy as np
 import random
 import csv
-from datetime import datetime
 from draw_New import draw_
 from PYtoAutocad import Build_model
 from TracePro_fast import tracepro_fast
 from txt_new import evaluate_fitness
 
 # === ES 參數設定 ===
-POP_SIZE = 5                 # μ
-OFFSPRING_SIZE = POP_SIZE #* 7  # λ
-N_GENERATIONS = 1
+POP_SIZE = 5         # μ
+OFFSPRING_SIZE = POP_SIZE * 7 # λ
+N_GENERATIONS = 100
 
 # 基因範圍
-SIDE_BOUND = [400, 1000]
+SIDE_BOUND = [0.4, 1]
 ANGLE_BOUND = [1, 179]
 
 # ES 自適應突變學習率 (n=3)
@@ -28,28 +27,40 @@ random.seed(GLOBAL_SEED)
 np.random.seed(GLOBAL_SEED)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = BASE_DIR
-onedrive_root = r"C:\Users\123\OneDrive - NTHU\411"
-save_root = os.path.join(PROJECT_ROOT, "GA_population")
-fitness_log_path = os.path.join(onedrive_root, "fitness_log.csv")
+save_root = os.path.join(BASE_DIR, "GA_population")
+fitness_log_path = os.path.join(r"C:\Users\123\OneDrive - NTHU\411", "fitness_log.csv")
 
 # === 工具函式 ===
+
 def generate_valid_population(n_individuals):
     population = []
     attempts = 0
     while len(population) < n_individuals and attempts < n_individuals * 10:
-        a = random.randint(*SIDE_BOUND)
-        b = random.randint(*SIDE_BOUND)
+        a = random.uniform(SIDE_BOUND[0], SIDE_BOUND[1])
+        b = random.uniform(SIDE_BOUND[0], SIDE_BOUND[1])
         A = random.randint(*ANGLE_BOUND)
         param = [a, b, A]
+        # 先 clamp，再交由 draw_ 檢查是否合法
+        param = clamp_gene(param)
         try:
             success, *_ = draw_(param, 1, 1, -1, -1, 0, 0)
             if success:
                 population.append(param)
-        except:
-            pass
+        except Exception as e:
+            print(f"generate_valid_population: draw_({param}) 失敗: {e}")
         attempts += 1
-    return np.array(population)
+    return np.array(population, dtype=float)
+
+def clamp_gene(child):
+    # 1) clip 让 child[0], child[1] 落在 [0.4, 1.0] 之间
+    child[0] = np.clip(child[0], SIDE_BOUND[0], SIDE_BOUND[1])
+    child[1] = np.clip(child[1], SIDE_BOUND[0], SIDE_BOUND[1])
+    # 2) 再 round 到小数第一位，保证最小值 >= 0.4
+    child[0] = float(round(child[0], 2))
+    child[1] = float(round(child[1], 2))
+    # 3) 角度保持在 [1,179]，然后取整
+    child[2] = int(np.clip(child[2], ANGLE_BOUND[0], ANGLE_BOUND[1]))
+    return child
 
 def load_fitness_log():
     if not os.path.exists(fitness_log_path):
@@ -59,15 +70,6 @@ def load_fitness_log():
         return list(reader)
 
 def save_fitness_log(fitness_log):
-    """
-    將 CSV 欄位簡化，只保留與個體和適應度相關的部分：
-      generation, role, parent_idx1, parent_idx2,
-      S1, S2, A1,
-      sigma1, sigma2, sigma3,
-      fitness, efficiency, process_score,
-      eff_10...eff_80,
-      random_seed
-    """
     fieldnames = [
         "generation", "role", "parent_idx1", "parent_idx2",
         "S1", "S2", "A1",
@@ -83,7 +85,7 @@ def save_fitness_log(fitness_log):
             writer.writerow(row)
 
 def check_if_evaluated(fitness_log, individual):
-    S1, S2, A1 = map(str, individual)
+    S1, S2, A1 = f"{individual[0]:.2f}", f"{individual[1]:.2f}", str(int(individual[2]))
     for row in fitness_log:
         if row["S1"] == S1 and row["S2"] == S2 and row["A1"] == A1:
             fitness = float(row["fitness"])
@@ -95,16 +97,9 @@ def check_if_evaluated(fitness_log, individual):
 
 def append_fitness(fitness_log, individual, sigma, fitness, efficiency, process_score,
                    generation, angle_effs=None, role="parent", parent_idx1=-1, parent_idx2=-1, seed=None):
-    """
-    把一筆個體結果寫入 fitness_log，包含以下欄位：
-      generation, role, parent_idx1, parent_idx2,
-      S1, S2, A1,
-      sigma1, sigma2, sigma3,
-      fitness, efficiency, process_score,
-      eff_10...eff_80,
-      random_seed
-    """
-    S1, S2, A1 = individual
+    S1 = f"{individual[0]:.2f}"
+    S2 = f"{individual[1]:.2f}"
+    A1 = str(int(individual[2]))
     sigma1, sigma2, sigma3 = sigma
     row = {
         "generation": generation,
@@ -132,19 +127,15 @@ def get_last_completed_generation():
     fitness_log = load_fitness_log()
     if not fitness_log:
         return 0
-    return max(int(row["generation"]) for row in fitness_log)
+    return max(int(row["generation"]) for row in fitness_log if row["role"] == "parent")
 
-def clamp_gene(child):
-    child[0] = int(np.clip(child[0], SIDE_BOUND[0], SIDE_BOUND[1]))
-    child[1] = int(np.clip(child[1], SIDE_BOUND[0], SIDE_BOUND[1]))
-    child[2] = int(np.clip(child[2], ANGLE_BOUND[0], ANGLE_BOUND[1]))
-    return child
+# === 主程式 ===
 
-# === 判斷從哪一代開始 並 寫入 run_config (僅第一次) ===
 start_gen = get_last_completed_generation()
 if start_gen == 0:
-    # 第一次執行：把超參數寫到 run_config.txt
+    # 第一次執行：寫 run_config
     config_path = os.path.join(save_root, "run_config.txt")
+    os.makedirs(save_root, exist_ok=True)
     with open(config_path, "w", encoding="utf-8") as cf:
         cf.write(f"POP_SIZE={POP_SIZE}\n")
         cf.write(f"OFFSPRING_SIZE={OFFSPRING_SIZE}\n")
@@ -157,9 +148,9 @@ if start_gen == 0:
 else:
     print(f"🔁 從第 {start_gen+1} 代執行至第 {N_GENERATIONS} 代")
 
-# === 初始化族群（基因 + 步長） ===
+# 初始化族群
 if start_gen == 0:
-    pop_genes = generate_valid_population(POP_SIZE)  # shape (μ, 3)
+    pop_genes = generate_valid_population(POP_SIZE)  # shape (μ, 3)，float array
     sigma_side = (SIDE_BOUND[1] - SIDE_BOUND[0]) * 0.1
     sigma_angle = (ANGLE_BOUND[1] - ANGLE_BOUND[0]) * 0.1
     initial_sigmas = np.array([sigma_side, sigma_side, sigma_angle])
@@ -169,14 +160,18 @@ else:
     prev_population = []
     for row in fitness_log:
         if int(row["generation"]) == start_gen and row["role"] == "parent":
-            prev_population.append([int(row["S1"]), int(row["S2"]), int(row["A1"])])
-    pop_genes = np.array(prev_population)
+            prev_population.append([
+                float(row["S1"]),
+                float(row["S2"]),
+                int(row["A1"])
+            ])
+    pop_genes = np.array(prev_population, dtype=float)
     sigma_side = (SIDE_BOUND[1] - SIDE_BOUND[0]) * 0.1
     sigma_angle = (ANGLE_BOUND[1] - ANGLE_BOUND[0]) * 0.1
     initial_sigmas = np.array([sigma_side, sigma_side, sigma_angle])
     pop_sigmas = np.tile(initial_sigmas, (POP_SIZE, 1))
 
-# === 迭代主迴圈 ===
+# 迭代主迴圈
 for g in range(start_gen, N_GENERATIONS):
     fitness_log = load_fitness_log()
 
@@ -188,8 +183,8 @@ for g in range(start_gen, N_GENERATIONS):
         if not is_evaluated:
             try:
                 Build_model(individual, mode="triangle", folder=folder)
-            except:
-                pass
+            except Exception as e:
+                print(f"⚠️ Build_model(parent {individual}) 失敗: {e}")
 
     fitness_values = []
     for i, individual in enumerate(pop_genes):
@@ -201,10 +196,10 @@ for g in range(start_gen, N_GENERATIONS):
             try:
                 tracepro_fast(os.path.join(folder, "Sim.scm"))
                 fitness, efficiency, process_score, angle_effs = evaluate_fitness(folder, individual)
-            except:
+            except Exception as e:
+                print(f"⚠️ tracepro/evaluate_fitness(parent {individual}) 失敗: {e}")
                 fitness, efficiency, process_score, angle_effs = 0.01, 0.0, 1.0, [0]*8
 
-        # 記錄父代 (role="parent")
         append_fitness(
             fitness_log=fitness_log,
             individual=individual,
@@ -217,7 +212,7 @@ for g in range(start_gen, N_GENERATIONS):
             role="parent",
             parent_idx1=-1,
             parent_idx2=-1,
-            seed=random.getrandbits(32)
+            seed=random.randint(0, 2**31)
         )
         fitness_values.append(fitness)
     fitness_values = np.array(fitness_values)
@@ -231,31 +226,35 @@ for g in range(start_gen, N_GENERATIONS):
         parent_gene = pop_genes[idx].copy()
         parent_sigma = pop_sigmas[idx].copy()
 
+        # ES 突變
         new_sigma = parent_sigma * np.exp(
             TAU_PRIME * np.random.randn() + TAU * np.random.randn(n)
         )
         new_sigma = np.maximum(new_sigma, 1e-8)
-
         child_gene = parent_gene + new_sigma * np.random.randn(n)
         child_gene = clamp_gene(child_gene)
 
-        children_genes.append(child_gene.astype(int))
-        children_sigmas.append(new_sigma)
-        children_parent_idxs.append((idx, -1))  # 只有一位父母
+        # 列印 debug，確認不為 0
+        # print(f"DEBUG (child before clamp) : {parent_gene + new_sigma * np.random.randn(n)}")
+        # print(f"DEBUG (child after clamp)  : {child_gene}")
 
-    children_genes = np.array(children_genes)
+        children_genes.append(child_gene)        # <-- **去掉 .astype(int)**
+        children_sigmas.append(new_sigma)
+        children_parent_idxs.append((idx, -1))
+
+    children_genes = np.array(children_genes, dtype=float)
     children_sigmas = np.array(children_sigmas)
 
     # --- 評估子代：畫 CAD → 全部模擬 ---
     for i, individual in enumerate(children_genes):
-        folder = os.path.join(save_root, f"P{i+1}")
+        folder = os.path.join(save_root, f"P{i+1}")   # <-- 改名稱不與 P 系列重複
         os.makedirs(folder, exist_ok=True)
         is_evaluated, _ = check_if_evaluated(fitness_log, individual)
         if not is_evaluated:
             try:
                 Build_model(individual, mode="triangle", folder=folder)
-            except:
-                pass
+            except Exception as e:
+                print(f"⚠️ Build_model(child {individual}) 失敗: {e}")
 
     offspring_fitness = []
     for i, individual in enumerate(children_genes):
@@ -267,10 +266,10 @@ for g in range(start_gen, N_GENERATIONS):
             try:
                 tracepro_fast(os.path.join(folder, "Sim.scm"))
                 fitness, efficiency, process_score, angle_effs = evaluate_fitness(folder, individual)
-            except:
+            except Exception as e:
+                print(f"⚠️ tracepro/evaluate_fitness(child {individual}) 失敗: {e}")
                 fitness, efficiency, process_score, angle_effs = 0.01, 0.0, 1.0, [0]*8
 
-        # 記錄子代 (role="offspring")
         parent_idx1, parent_idx2 = children_parent_idxs[i]
         append_fitness(
             fitness_log=fitness_log,
@@ -284,7 +283,7 @@ for g in range(start_gen, N_GENERATIONS):
             role="offspring",
             parent_idx1=parent_idx1,
             parent_idx2=parent_idx2,
-            seed=random.getrandbits(32)
+            seed=random.randint(0, 2**31)
         )
         offspring_fitness.append(fitness)
     offspring_fitness = np.array(offspring_fitness)
