@@ -47,21 +47,25 @@ def Build_model(sid_ang, mode="stair", folder="."):
 
     start_time = time.time()
     sleep_time = 0.2
-    scale = 0.001
+    scale = 1 #0.001 #(mm)
 
     side_a, side_b, angle_B = sid_ang
     angle_B2_rad = math.radians(90 - angle_B)
     B = (0, side_a)
-    Cx = side_b * math.cos(angle_B2_rad)
-    Cy = side_a - side_b * math.sin(angle_B2_rad)
+    Cx = round(side_b * math.cos(angle_B2_rad), 2)
+    Cy = round(side_a - side_b * math.sin(angle_B2_rad), 2)
     C = (Cx, Cy)
     A = (0, 0)
 
     side_c = math.sqrt(
         side_a**2 + side_b**2 - 2 * side_a * side_b * math.cos(math.radians(angle_B))
     )
-    Ix = (side_b * A[0] + side_c * B[0] + side_a * Cx) / (side_a + side_b + side_c)
-    Iy = (side_b * A[1] + side_c * B[1] + side_a * Cy) / (side_a + side_b + side_c)
+    if side_a + side_b + side_c == 0:
+        print(f"⚠️ Invalid triangle: side_a={side_a}, side_b={side_b}, side_c={side_c}. Skip drawing.")
+        return 0  # 或者其他方式：raise Exception / 直接退出本函数
+
+    Ix = round((side_b * A[0] + side_c * B[0] + side_a * Cx) / (side_a + side_b + side_c), 1)
+    Iy = round((side_b * A[1] + side_c * B[1] + side_a * Cy) / (side_a + side_b + side_c), 1)
 
     slope_ac = Cy / Cx
     slope_bc = (Cy - B[1]) / (Cx - B[0])
@@ -90,8 +94,8 @@ def Build_model(sid_ang, mode="stair", folder="."):
     if mode == "triangle":
         # top = sid_ang[0]
         # bottom = 0
-        top = (math.floor(equ_bc(0) / pixel_size)) * pixel_size
-        bottom = (math.ceil(equ_ac(0) / pixel_size)) * pixel_size
+        top = equ_bc(0) 
+        bottom = equ_ac(0)
         for p1, p2 in zip([A, B, C], [B, C, A]):
             acad.model.AddLine(
                 APoint(p1[0] * scale, p1[1] * scale),
@@ -173,10 +177,16 @@ def Build_model(sid_ang, mode="stair", folder="."):
 
     send_command_with_retry(acad, "SELECT\nALL\n\n_JOIN\n\n")
     send_command_with_retry(acad, "ZOOM\nE\n\n")
-    send_command_with_retry(
-        acad, f"-BOUNDARY\n{round(Ix*scale,4)},{round(Iy*scale,4)}\n\n"
-    )
+    # send_command_with_retry(
+    #     acad, f"-BOUNDARY\n{round(Ix*scale,1)},{round(Iy*scale,1)}\n\n"
+    # )
+    try:
+        send_command_with_retry(acad, f"-BOUNDARY\n{Ix},{Iy}\n\n")
+    except Exception as e:
+        print(f"⚠️ Build_model: Boundary 失敗 ({e})，跳過 Extrude。")
+        return 0
     send_command_with_retry(acad, "_EXTRUDE\nL\n\n1\n")
+    time.sleep(0.2)
     #send_command_with_retry(acad, "-BLOCK\nprism\n0,0,0\nL\n\n")
 
     send_command_with_retry(acad, "UNION\nALL\n\n")
@@ -199,12 +209,12 @@ def Build_model(sid_ang, mode="stair", folder="."):
     actual_array_top = top + (rows - 1) * (top - bottom)
     array_center_y = (actual_array_top + bottom) / 2
     # === Step: 儲存中心 y 座標 ===
-    center_y = array_center_y * scale
+    center_y = round(array_center_y * scale, 1)
     
     # with open(r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\file\center_y.txt", "w") as f:
     #     f.write(str(center_y))
 
-    center_x = (Cx) * scale + 1
+    center_x = round(Cx * scale + 1, 1)
     # with open(r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\file\center_x.txt", "w") as f:
     #     f.write(str(center_x))
     # 儲存 center_y 和 center_x
@@ -226,8 +236,15 @@ def Build_model(sid_ang, mode="stair", folder="."):
     
     dwg_file_path = (dwg_path)
 
-    send_command_with_retry(acad, f"Export\n{sat_file_path}\ny\nALL\n\n")
     send_command_with_retry(acad, f"save\n{dwg_file_path}\ny\n")
+    #send_command_with_retry(acad, f"Export\n{sat_file_path}\ny\nALL\n\n")
+    
+    try:
+        send_command_with_retry(acad, f"Export\n{sat_file_path}\ny\nALL\n\n")
+        time.sleep(2)
+    except Exception as e:
+        print(f"⚠️ 嘗試儲存 AutoCAD 檔案時出錯：{e}")
+    
     try:
         send_command_with_retry(acad, "close\n")
         time.sleep(2)
@@ -240,5 +257,5 @@ def Build_model(sid_ang, mode="stair", folder="."):
 
 
 #Example usage
-# sid_ang = [900, 5000, 64]
-# Build_model(sid_ang, 1, "triangle")
+# sid_ang = [0.9, 0.9, 64]
+# Build_model(sid_ang, 1, "triangle", "C:\Users\123\SGM_GA\GA_population")
