@@ -9,7 +9,7 @@ from txt_new import evaluate_fitness
 
 # === ES 參數設定 ===
 POP_SIZE = 5         # μ
-OFFSPRING_SIZE = POP_SIZE * 7 # λ
+OFFSPRING_SIZE = POP_SIZE  # λ
 N_GENERATIONS = 100
 
 # 基因範圍
@@ -60,6 +60,7 @@ def clamp_gene(child):
     child[1] = float(round(child[1], 2))
     # 3) 角度保持在 [1,179]，然后取整
     child[2] = int(np.clip(child[2], ANGLE_BOUND[0], ANGLE_BOUND[1]))
+
     return child
 
 def load_fitness_log():
@@ -151,8 +152,8 @@ else:
 # 初始化族群
 if start_gen == 0:
     pop_genes = generate_valid_population(POP_SIZE)  # shape (μ, 3)，float array
-    sigma_side = (SIDE_BOUND[1] - SIDE_BOUND[0]) * 0.1
-    sigma_angle = (ANGLE_BOUND[1] - ANGLE_BOUND[0]) * 0.1
+    sigma_side = (SIDE_BOUND[1] - SIDE_BOUND[0]) * 0.05
+    sigma_angle = 1
     initial_sigmas = np.array([sigma_side, sigma_side, sigma_angle])
     pop_sigmas = np.tile(initial_sigmas, (POP_SIZE, 1))  # shape (μ, 3)
 else:
@@ -166,10 +167,12 @@ else:
                 int(row["A1"])
             ])
     pop_genes = np.array(prev_population, dtype=float)
-    sigma_side = (SIDE_BOUND[1] - SIDE_BOUND[0]) * 0.1
-    sigma_angle = (ANGLE_BOUND[1] - ANGLE_BOUND[0]) * 0.1
+    sigma_side = (SIDE_BOUND[1] - SIDE_BOUND[0]) * 0.05
+    sigma_angle = 1
     initial_sigmas = np.array([sigma_side, sigma_side, sigma_angle])
-    pop_sigmas = np.tile(initial_sigmas, (POP_SIZE, 1))
+    pop_sigmas = np.tile(np.array([0.05*(SIDE_BOUND[1]-SIDE_BOUND[0]),
+                                   0.05*(SIDE_BOUND[1]-SIDE_BOUND[0]),
+                                   1.0]), (POP_SIZE, 1))
 
 # 迭代主迴圈
 for g in range(start_gen, N_GENERATIONS):
@@ -235,8 +238,8 @@ for g in range(start_gen, N_GENERATIONS):
         child_gene = clamp_gene(child_gene)
 
         # 列印 debug，確認不為 0
-        # print(f"DEBUG (child before clamp) : {parent_gene + new_sigma * np.random.randn(n)}")
-        # print(f"DEBUG (child after clamp)  : {child_gene}")
+        print(f"DEBUG (child before clamp) : {parent_gene + new_sigma * np.random.randn(n)}")
+        print(f"DEBUG (child after clamp)  : {child_gene}")
 
         children_genes.append(child_gene)        # <-- **去掉 .astype(int)**
         children_sigmas.append(new_sigma)
