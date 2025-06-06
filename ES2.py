@@ -164,7 +164,7 @@ else:
             prev_population.append([
                 float(row["S1"]),
                 float(row["S2"]),
-                int(row["A1"])
+                float(row["A1"])
             ])
     pop_genes = np.array(prev_population, dtype=float)
     sigma_side = (SIDE_BOUND[1] - SIDE_BOUND[0]) * 0.05
@@ -188,6 +188,7 @@ for g in range(start_gen, N_GENERATIONS):
                 Build_model(individual, mode="triangle", folder=folder)
             except Exception as e:
                 print(f"⚠️ Build_model(parent {individual}) 失敗: {e}")
+                pass
 
     fitness_values = []
     for i, individual in enumerate(pop_genes):
@@ -258,6 +259,7 @@ for g in range(start_gen, N_GENERATIONS):
                 Build_model(individual, mode="triangle", folder=folder)
             except Exception as e:
                 print(f"⚠️ Build_model(child {individual}) 失敗: {e}")
+                pass
 
     offspring_fitness = []
     for i, individual in enumerate(children_genes):
@@ -291,14 +293,38 @@ for g in range(start_gen, N_GENERATIONS):
         offspring_fitness.append(fitness)
     offspring_fitness = np.array(offspring_fitness)
 
-    # --- 合併 μ+λ，選出下一代 μ ---
+    # --- 合併 μ+λ，選出下一代 μ，最多保留 2 個相同基因 ---
     combined_genes = np.vstack([pop_genes, children_genes])
     combined_sigmas = np.vstack([pop_sigmas, children_sigmas])
     combined_fitness = np.hstack([fitness_values, offspring_fitness])
 
+    # 先將所有個體依 fitness 排序（由大到小）
+    sorted_idx = np.argsort(combined_fitness)[::-1]
+
+    new_parents = []
+    new_sigmas = []
+    count_dict = {}   # 用來記錄同一組基因已經選過幾次
+    MAX_DUPLICATE = 2 # 最多允許同一 (S1,S2,A1) 出現 2 次
+
+    for idx in sorted_idx:
+        if len(new_parents) >= POP_SIZE:
+            break
+
+        gene = combined_genes[idx]
+        # 基因取值用 clamp_gene 相同的精度：S1, S2 取到小數第 2 位，A1 取整數
+        key = (round(gene[0], 2), round(gene[1], 2), int(gene[2]))
+        count = count_dict.get(key, 0)
+
+        if count < MAX_DUPLICATE:
+            new_parents.append(gene)
+            new_sigmas.append(combined_sigmas[idx])
+            count_dict[key] = count + 1
+
+    # 最後把 new_parents、new_sigmas 轉回 numpy array
     best_indices = np.argsort(combined_fitness)[-POP_SIZE:]
-    pop_genes = combined_genes[best_indices]
-    pop_sigmas = combined_sigmas[best_indices]
+    pop_genes = np.array(new_parents, dtype=float)
+    pop_sigmas = np.array(new_sigmas, dtype=float)
+
 
     print(f"★ Generation {g+1} 最佳個體: {pop_genes[-1]}, Fitness: {combined_fitness[best_indices[-1]]:.2f}")
 
