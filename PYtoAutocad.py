@@ -241,6 +241,7 @@ def Build_model(sid_ang, mode="stair", folder="."):
     send_command_with_retry(acad, f"save\n{dwg_file_path}\ny\n")
     #send_command_with_retry(acad, f"Export\n{sat_file_path}\ny\nALL\n\n")
     
+
     try:
         send_command_with_retry(acad, f"Export\n{sat_file_path}\ny\nALL\n\n")
         time.sleep(2)
