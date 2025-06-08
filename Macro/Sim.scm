@@ -68,7 +68,7 @@
         (file:save-as bmp_path)
         ;; (analysis:candela-save-bmp "polar-distribution" polar_bmp)
         ;; (analysis:candela-save-bmp "rectangular-distribution" rect_bmp)
-        (analysis:candela-save-txt "polar-distribution" txt_path 61)
+        (analysis:candela-save-txt "polar-distribution" txt_path 361)
       )
     )
 

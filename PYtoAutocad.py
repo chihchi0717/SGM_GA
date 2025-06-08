@@ -45,6 +45,23 @@ def Build_model(sid_ang, mode="stair", folder="."):
     center_y_path = os.path.join(folder, "center_y.txt")
     center_x_path = os.path.join(folder, "center_x.txt")
 
+    # ===== 在繪圖前先刪除前一代 SAT 檔案 =====
+    log = []  # 紀錄訊息
+
+    if os.path.exists(sat_path):
+        try:
+            os.remove(sat_path)
+            log.append(f"🗑️ 已刪除上一代 SAT 檔案: {sat_path}")
+        except Exception as e:
+            log.append(f"⚠️ 無法刪除舊 SAT 檔案: {sat_path}, 錯誤: {e}")
+
+    if os.path.exists(dwg_path):
+        try:
+            os.remove(dwg_path)
+            log.append(f"🗑️ 已刪除上一代 DWG 檔案: {dwg_path}")
+        except Exception as e:
+            log.append(f"⚠️ 無法刪除舊 DWG 檔案: {dwg_path}, 錯誤: {e}")
+            
     start_time = time.time()
     sleep_time = 0.2
     scale = 1 #0.001 #(mm)
@@ -86,12 +103,12 @@ def Build_model(sid_ang, mode="stair", folder="."):
     time.sleep(sleep_time)
 
     # 設定單位
-    try:
-        acad.ActiveDocument.SendCommand("-UNITS\n2\n4\n1\n4\n0\nY\n\n")
-        time.sleep(sleep_time)
-    except Exception as e:
-        print(f"⚠️ 設定 UNITS 命令失敗：{e}")
-        raise
+    # try:
+    #     acad.ActiveDocument.SendCommand("-UNITS\n2\n4\n1\n4\n0\nY\n\n")
+    #     time.sleep(sleep_time)
+    # except Exception as e:
+    #     print(f"⚠️ 設定 UNITS 命令失敗：{e}")
+    #     raise
 
     if mode == "triangle":
         # top = sid_ang[0]
@@ -238,24 +255,35 @@ def Build_model(sid_ang, mode="stair", folder="."):
     
     dwg_file_path = (dwg_path)
 
-    send_command_with_retry(acad, f"save\n{dwg_file_path}\ny\n")
-    #send_command_with_retry(acad, f"Export\n{sat_file_path}\ny\nALL\n\n")
-    
+    # === 儲存 DWG 與 SAT 檔案 ===
+    try:
+        send_command_with_retry(acad, f"save\n{dwg_path}\ny\n")
+    except Exception as e:
+        print(f"⚠️ 儲存 DWG 時出錯：{e}")
 
     try:
-        send_command_with_retry(acad, f"Export\n{sat_file_path}\ny\nALL\n\n")
+        send_command_with_retry(acad, f"Export\n{sat_path}\ny\nALL\n\n")
         time.sleep(2)
     except Exception as e:
-        print(f"⚠️ 嘗試儲存 AutoCAD 檔案時出錯：{e}")
-    
-    
-    # === 確認 SAT 和 DWG 檔案是否已正確輸出 ===
-    timeout = 10  # 最多等 10 秒
-    elapsed = 0
-    while not (os.path.exists(sat_path) and os.path.exists(dwg_path)) and elapsed < timeout:
-        time.sleep(1)
-        elapsed += 1
+        print(f"⚠️ 嘗試儲存 SAT 檔案時出錯：{e}")
 
+    # === 確認 SAT 和 DWG 檔案是否已正確輸出，若失敗則最多重試 3 次 ===
+    for retry in range(3):
+        if os.path.exists(sat_path) and os.path.exists(dwg_path):
+            break  # ✅ 已成功儲存
+        print(f"⚠️ 檔案未成功產生，進行第 {retry + 1} 次重試存檔...")
+        try:
+            send_command_with_retry(acad, f"save\n{dwg_path}\ny\n")
+        except Exception as e:
+            print(f"⚠️ 重試儲存 DWG 時出錯：{e}")
+        try:
+            send_command_with_retry(acad, f"Export\n{sat_path}\ny\nALL\n\n")
+            time.sleep(2)
+        except Exception as e:
+            print(f"⚠️ 重試儲存 SAT 時出錯：{e}")
+        time.sleep(1)
+
+    # === 最後關閉檔案（只在檔案已生成時才關） ===
     if os.path.exists(sat_path) and os.path.exists(dwg_path):
         try:
             send_command_with_retry(acad, "close\n")
@@ -263,11 +291,13 @@ def Build_model(sid_ang, mode="stair", folder="."):
         except Exception as e:
             print(f"⚠️ 嘗試關閉 AutoCAD 檔案時出錯：{e}")
     else:
-        print(f"⚠️ 輸出檔案 {sat_path} 或 {dwg_path} 未成功生成，AutoCAD 不會關閉。")
+        print(f"❌ 最終仍未成功產生檔案：{sat_path} 或 {dwg_path}。")
+
 
 
     #print("Autocad Execution time:", round(time.time() - start_time, 2), "sec")
-    return 1
+    return 1, log
+
 
 
 #Example usage

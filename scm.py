@@ -30,7 +30,7 @@ txtDir = path + "\\Macro\\"
 with open(txtDir+"Sim.scm", "r") as f:
     #old_folder = txtDir + "Final_run.scm"
     old_folder = txtDir + "Sim.scm"
-    population = 100
+    population = 40
     for i in range(population):
         new_folder = path + "\\GA_population\\P" + str(i+1)
         mkdir(new_folder)

@@ -6,11 +6,12 @@ from draw_New import draw_
 from PYtoAutocad import Build_model
 from TracePro_fast import tracepro_fast
 from txt_new import evaluate_fitness
+import time
 
 # === ES 參數設定 ===
 POP_SIZE = 5         # μ
 OFFSPRING_SIZE = POP_SIZE  # λ
-N_GENERATIONS = 100
+N_GENERATIONS = 2
 
 # 基因範圍
 SIDE_BOUND = [0.4, 1]
@@ -28,7 +29,7 @@ np.random.seed(GLOBAL_SEED)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 save_root = os.path.join(BASE_DIR, "GA_population")
-fitness_log_path = os.path.join(r"C:\Users\123\OneDrive - NTHU\411", "fitness_log.csv")
+fitness_log_path = os.path.join(r"C:\Users\User\OneDrive - NTHU\nuc", "fitness_log.csv")
 
 # === 工具函式 ===
 
@@ -56,10 +57,10 @@ def clamp_gene(child):
     child[0] = np.clip(child[0], SIDE_BOUND[0], SIDE_BOUND[1])
     child[1] = np.clip(child[1], SIDE_BOUND[0], SIDE_BOUND[1])
     # 2) 再 round 到小数第一位，保证最小值 >= 0.4
-    child[0] = float(round(child[0], 2))
-    child[1] = float(round(child[1], 2))
+    # child[0] = float(round(child[0], 2))
+    # child[1] = float(round(child[1], 2))
     # 3) 角度保持在 [1,179]，然后取整
-    child[2] = int(np.clip(child[2], ANGLE_BOUND[0], ANGLE_BOUND[1]))
+    child[2] = np.clip(child[2], ANGLE_BOUND[0], ANGLE_BOUND[1])
 
     return child
 
@@ -86,7 +87,7 @@ def save_fitness_log(fitness_log):
             writer.writerow(row)
 
 def check_if_evaluated(fitness_log, individual):
-    S1, S2, A1 = f"{individual[0]:.2f}", f"{individual[1]:.2f}", str(int(individual[2]))
+    S1, S2, A1 = f"{individual[0]:.2f}", f"{individual[1]:.2f}", str((individual[2]))
     for row in fitness_log:
         if row["S1"] == S1 and row["S2"] == S2 and row["A1"] == A1:
             fitness = float(row["fitness"])
@@ -98,8 +99,8 @@ def check_if_evaluated(fitness_log, individual):
 
 def append_fitness(fitness_log, individual, sigma, fitness, efficiency, process_score,
                    generation, angle_effs=None, role="parent", parent_idx1=-1, parent_idx2=-1, seed=None):
-    S1 = f"{individual[0]:.2f}"
-    S2 = f"{individual[1]:.2f}"
+    S1 = f"{round(individual[0], 2):.2f}"
+    S2 = f"{round(individual[1], 2):.2f}"
     A1 = str(int(individual[2]))
     sigma1, sigma2, sigma3 = sigma
     row = {
@@ -152,8 +153,8 @@ else:
 # 初始化族群
 if start_gen == 0:
     pop_genes = generate_valid_population(POP_SIZE)  # shape (μ, 3)，float array
-    sigma_side = (SIDE_BOUND[1] - SIDE_BOUND[0]) * 0.05
-    sigma_angle = 1
+    sigma_side = (SIDE_BOUND[1] - SIDE_BOUND[0]) * 0.2
+    sigma_angle = 3
     initial_sigmas = np.array([sigma_side, sigma_side, sigma_angle])
     pop_sigmas = np.tile(initial_sigmas, (POP_SIZE, 1))  # shape (μ, 3)
 else:
@@ -167,8 +168,8 @@ else:
                 float(row["A1"])
             ])
     pop_genes = np.array(prev_population, dtype=float)
-    sigma_side = (SIDE_BOUND[1] - SIDE_BOUND[0]) * 0.05
-    sigma_angle = 1
+    sigma_side = (SIDE_BOUND[1] - SIDE_BOUND[0]) * 0.2
+    sigma_angle = 3
     initial_sigmas = np.array([sigma_side, sigma_side, sigma_angle])
     pop_sigmas = np.tile(np.array([0.05*(SIDE_BOUND[1]-SIDE_BOUND[0]),
                                    0.05*(SIDE_BOUND[1]-SIDE_BOUND[0]),
@@ -183,12 +184,28 @@ for g in range(start_gen, N_GENERATIONS):
         folder = os.path.join(save_root, f"P{i+1}")
         os.makedirs(folder, exist_ok=True)
         is_evaluated, _ = check_if_evaluated(fitness_log, individual)
+        MAX_RETRY = 3  # 最多重試次數
+
         if not is_evaluated:
-            try:
-                Build_model(individual, mode="triangle", folder=folder)
-            except Exception as e:
-                print(f"⚠️ Build_model(parent {individual}) 失敗: {e}")
-                pass
+            build_success = False
+            attempt = 0
+            while build_success == False:
+                try:
+                    result, log = Build_model(individual, mode="triangle", folder=folder)
+                    for msg in log:
+                        print(msg)
+                    if result == 1:
+                        build_success = True
+                        break
+                except Exception as e:
+                    print(f"❌ Build_model 第 {attempt+1} 次失敗：{e}")
+                time.sleep(1)  # 等一秒再試（讓 AutoCAD 有時間反應）
+
+            # if not build_success:
+            #     print(f"❌ 個體 {individual} 多次建模失敗，跳過後續模擬")
+            #     raise 
+
+                
 
     fitness_values = []
     for i, individual in enumerate(pop_genes):
@@ -197,12 +214,16 @@ for g in range(start_gen, N_GENERATIONS):
         if is_evaluated:
             fitness, efficiency, process_score, angle_effs = eval_data
         else:
-            try:
-                tracepro_fast(os.path.join(folder, "Sim.scm"))
-                fitness, efficiency, process_score, angle_effs = evaluate_fitness(folder, individual)
-            except Exception as e:
-                print(f"⚠️ tracepro/evaluate_fitness(parent {individual}) 失敗: {e}")
-                fitness, efficiency, process_score, angle_effs = 0.01, 0.0, 1.0, [0]*8
+            sim_success = False
+            while sim_success == False:
+                try:
+                    tracepro_fast(os.path.join(folder, "Sim.scm"))
+                    fitness, efficiency, process_score, angle_effs = evaluate_fitness(folder, individual)
+                    sim_success = True
+                except Exception as e:
+                    print(f"⚠️ tracepro/evaluate_fitness(parent {individual}) 失敗: {e}")
+                    time.sleep(1)
+                    # fitness, efficiency, process_score, angle_effs = 0.01, 0.0, 1.0, [0]*8
 
         append_fitness(
             fitness_log=fitness_log,
@@ -234,13 +255,13 @@ for g in range(start_gen, N_GENERATIONS):
         new_sigma = parent_sigma * np.exp(
             TAU_PRIME * np.random.randn() + TAU * np.random.randn(n)
         )
-        new_sigma = np.maximum(new_sigma, 1e-8)
+        new_sigma = np.maximum(new_sigma, 0.02)
         child_gene = parent_gene + new_sigma * np.random.randn(n)
         child_gene = clamp_gene(child_gene)
 
         # 列印 debug，確認不為 0
-        print(f"DEBUG (child before clamp) : {parent_gene + new_sigma * np.random.randn(n)}")
-        print(f"DEBUG (child after clamp)  : {child_gene}")
+        # print(f"DEBUG (child before clamp) : {parent_gene + new_sigma * np.random.randn(n)}")
+        # print(f"DEBUG (child after clamp)  : {child_gene}")
 
         children_genes.append(child_gene)        # <-- **去掉 .astype(int)**
         children_sigmas.append(new_sigma)
@@ -254,12 +275,27 @@ for g in range(start_gen, N_GENERATIONS):
         folder = os.path.join(save_root, f"P{i+1}")   # <-- 改名稱不與 P 系列重複
         os.makedirs(folder, exist_ok=True)
         is_evaluated, _ = check_if_evaluated(fitness_log, individual)
+        MAX_RETRY = 3  # 最多重試次數
+
         if not is_evaluated:
-            try:
-                Build_model(individual, mode="triangle", folder=folder)
-            except Exception as e:
-                print(f"⚠️ Build_model(child {individual}) 失敗: {e}")
-                pass
+            build_success = False
+            attempt = 0
+            while build_success == False:
+                try:
+                    result, log = Build_model(individual, mode="triangle", folder=folder)
+                    for msg in log:
+                        print(msg)
+                    if result == 1:
+                        build_success = True
+                        break
+                except Exception as e:
+                    print(f"❌ Build_model 第 {attempt+1} 次失敗：{e}")
+                time.sleep(1)  # 等一秒再試（讓 AutoCAD 有時間反應）
+
+
+            # if not build_success:
+            #     print(f"❌ 個體 {individual} 多次建模失敗，跳過後續模擬")
+            #     continue  # 或直接 return / raise Error 
 
     offspring_fitness = []
     for i, individual in enumerate(children_genes):
@@ -268,12 +304,15 @@ for g in range(start_gen, N_GENERATIONS):
         if is_evaluated:
             fitness, efficiency, process_score, angle_effs = eval_data
         else:
-            try:
-                tracepro_fast(os.path.join(folder, "Sim.scm"))
-                fitness, efficiency, process_score, angle_effs = evaluate_fitness(folder, individual)
-            except Exception as e:
-                print(f"⚠️ tracepro/evaluate_fitness(child {individual}) 失敗: {e}")
-                fitness, efficiency, process_score, angle_effs = 0.01, 0.0, 1.0, [0]*8
+            sim_success = False
+            while sim_success == False:
+                try:
+                    tracepro_fast(os.path.join(folder, "Sim.scm"))
+                    fitness, efficiency, process_score, angle_effs = evaluate_fitness(folder, individual)
+                    sim_success = True
+                except Exception as e:
+                    print(f"⚠️ tracepro/evaluate_fitness(parent {individual}) 失敗: {e}")
+                    time.sleep(1)
 
         parent_idx1, parent_idx2 = children_parent_idxs[i]
         append_fitness(
