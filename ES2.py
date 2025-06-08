@@ -7,7 +7,7 @@ from PYtoAutocad import Build_model
 from TracePro_fast import tracepro_fast
 from txt_new import evaluate_fitness
 import time
-
+import shutil
 # === ES 參數設定 ===
 POP_SIZE = 5         # μ
 OFFSPRING_SIZE = POP_SIZE  # λ
@@ -31,6 +31,25 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 save_root = os.path.join(BASE_DIR, "GA_population")
 fitness_log_path = os.path.join(r"C:\Users\User\OneDrive - NTHU\nuc", "fitness_log.csv")
 
+# === 初始化 SCM 複製 ===
+def copy_scm_to_all_folders():
+    macro_dir = os.path.join(BASE_DIR, "Macro")
+    scm_file = os.path.join(macro_dir, "Sim.scm")
+    print(f"複製 SCM 檔案: {scm_file}")
+    # 親代資料夾 P1 ~ P5
+    for i in range(1, POP_SIZE + 1):
+        folder = os.path.join(save_root, f"P{i}")
+        os.makedirs(folder, exist_ok=True)
+        shutil.copy(scm_file, folder)
+
+    # 子代資料夾 C1 ~ C(POP_SIZE*7)
+    for i in range(1, OFFSPRING_SIZE + 1):
+        folder = os.path.join(save_root, f"C{i}")
+        os.makedirs(folder, exist_ok=True)
+        shutil.copy(scm_file, folder)
+
+copy_scm_to_all_folders()
+
 # === 工具函式 ===
 
 def generate_valid_population(n_individuals):
@@ -39,7 +58,8 @@ def generate_valid_population(n_individuals):
     while len(population) < n_individuals and attempts < n_individuals * 10:
         a = random.uniform(SIDE_BOUND[0], SIDE_BOUND[1])
         b = random.uniform(SIDE_BOUND[0], SIDE_BOUND[1])
-        A = random.randint(*ANGLE_BOUND)
+        # A = random.randint(*ANGLE_BOUND)
+        A = random.uniform(ANGLE_BOUND[0], ANGLE_BOUND[1])
         param = [a, b, A]
         # 先 clamp，再交由 draw_ 檢查是否合法
         param = clamp_gene(param)
@@ -56,10 +76,7 @@ def clamp_gene(child):
     # 1) clip 让 child[0], child[1] 落在 [0.4, 1.0] 之间
     child[0] = np.clip(child[0], SIDE_BOUND[0], SIDE_BOUND[1])
     child[1] = np.clip(child[1], SIDE_BOUND[0], SIDE_BOUND[1])
-    # 2) 再 round 到小数第一位，保证最小值 >= 0.4
-    # child[0] = float(round(child[0], 2))
-    # child[1] = float(round(child[1], 2))
-    # 3) 角度保持在 [1,179]，然后取整
+    # 2) 角度保持在 [1,179]，
     child[2] = np.clip(child[2], ANGLE_BOUND[0], ANGLE_BOUND[1])
 
     return child
@@ -256,6 +273,11 @@ for g in range(start_gen, N_GENERATIONS):
             TAU_PRIME * np.random.randn() + TAU * np.random.randn(n)
         )
         new_sigma = np.maximum(new_sigma, 0.02)
+
+        # === 10% 機率，強制 reset 為大突變 ===
+        if random.random() < 0.1:
+            new_sigma = np.array([0.2, 0.2, 5.0])  # 重新擴大突變幅度
+
         child_gene = parent_gene + new_sigma * np.random.randn(n)
         child_gene = clamp_gene(child_gene)
 
@@ -272,7 +294,7 @@ for g in range(start_gen, N_GENERATIONS):
 
     # --- 評估子代：畫 CAD → 全部模擬 ---
     for i, individual in enumerate(children_genes):
-        folder = os.path.join(save_root, f"P{i+1}")   # <-- 改名稱不與 P 系列重複
+        folder = os.path.join(save_root, f"C{i+1}")   # <-- 改名稱不與 P 系列重複
         os.makedirs(folder, exist_ok=True)
         is_evaluated, _ = check_if_evaluated(fitness_log, individual)
         MAX_RETRY = 3  # 最多重試次數
