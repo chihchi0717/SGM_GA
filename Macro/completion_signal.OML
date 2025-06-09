@@ -1,5 +1,5 @@
 1200 0 2 0           
-16 TracePro - 3.2.0 14 ACIS 12.0.6 NT 24 Mon Jun 09 10:18:45 2025 
+16 TracePro - 3.2.0 14 ACIS 12.0.6 NT 24 Mon Jun 09 11:35:41 2025 
 1 9.9999999999999995e-007 1e-010 
 body $-1 -1 -1 $-1 $2 $-1 $3 T -0.79999999999999716 -0.80000000000000027 -0.5 0.79999999999999716 0.80000000000000027 0.5 #
 body $4 -1 -1 $-1 $5 $-1 $6 T -7.7715611723760958e-016 -12.040187714742407 0 0.40000000000000013 0.45000000000000012 1 #
@@ -2961,7 +2961,7 @@ End Raytrace WaveBand List
 Source Raytrace Options1
 0 1
 Raytrace Elapsed Time
-0 0 0 0
+0 0 0 1
 Raytrace Options
 1 1 1 0 1 0 0 1 0 1e+006
 Advanced Raytrace Options
