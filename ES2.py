@@ -13,8 +13,8 @@ from pywinauto import application, findwindows
 import smtplib
 import traceback
 from email.message import EmailMessage
-# 先定义好全局 log_dir
-log_dir = r"C:\Users\User\OneDrive - NTHU\nuc"
+
+log_dir = r"C:\Users\user\OneDrive - NTHU\home"
 
 def send_error(subject: str, body: str):
     try:
@@ -47,14 +47,14 @@ TAU_PRIME = 1 / np.sqrt(2 * n)
 TAU = 1 / np.sqrt(2 * np.sqrt(n))
 
 # 隨機種子（固定值可重現）
-GLOBAL_SEED = 42
+GLOBAL_SEED = 12
 random.seed(GLOBAL_SEED)
 np.random.seed(GLOBAL_SEED)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 save_root = os.path.join(BASE_DIR, "GA_population")
 # fitness_log_path = os.path.join(r"C:\Users\User\OneDrive - NTHU\nuc", "fitness_log.csv")
-log_dir = os.path.join(r"C:\Users\User\OneDrive - NTHU\nuc")
+#log_dir = os.path.join(r"C:\Users\User\OneDrive - NTHU\nuc")
 os.makedirs(log_dir, exist_ok=True)
 fitness_log_path = os.path.join(log_dir, "fitness_log.csv")
 
@@ -182,11 +182,32 @@ def append_fitness(fitness_log, individual, sigma, fitness, efficiency, process_
     save_fitness_log(fitness_log, fitness_log_path)
 
 
+# def get_last_completed_generation():
+#     fitness_log = load_fitness_log()
+#     if not fitness_log:
+#         return 0
+#     return max(int(row["generation"]) for row in fitness_log if row["role"] == "parent")
 def get_last_completed_generation():
     fitness_log = load_fitness_log()
     if not fitness_log:
         return 0
-    return max(int(row["generation"]) for row in fitness_log if row["role"] == "parent")
+
+    parent_count = {}
+    offspring_count = {}
+    for row in fitness_log:
+        gen = int(row["generation"])
+        role = row["role"]
+        if role == "parent":
+            parent_count[gen] = parent_count.get(gen, 0) + 1
+        elif role == "offspring":
+            offspring_count[gen] = offspring_count.get(gen, 0) + 1
+
+    completed_gens = [
+        gen for gen in parent_count
+        if parent_count[gen] >= POP_SIZE and offspring_count.get(gen, 0) >= OFFSPRING_SIZE
+    ]
+
+    return max(completed_gens) if completed_gens else 0
 
 # === 主程式 ===
 def main():
@@ -436,7 +457,7 @@ from datetime import datetime
 # … 其他 imports …
 
 # 先定义好全局 log_dir
-log_dir = r"C:\Users\User\OneDrive - NTHU\nuc"
+#log_dir = r"C:\Users\User\OneDrive - NTHU\nuc"
 
 def send_error(subject: str, body: str):
     try:
