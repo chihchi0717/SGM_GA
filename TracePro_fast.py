@@ -11,6 +11,7 @@ warnings.filterwarnings(
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 signal = os.path.join(BASE_DIR, "Macro", "completion_signal.OML")
 reset_path = os.path.join(BASE_DIR, "Macro", "Reset.scm")
+sim_path = os.path.join(BASE_DIR, "Macro", "Sim.scm")
 # print("== BASE_DIR:", BASE_DIR)
 # print("== signal full path:", signal)
 # print("== reset_path full path:", reset_path)
@@ -37,7 +38,7 @@ def load_macro(app, path_macro):
     macro_win[u'檔案名稱(&N):Edit'].set_edit_text(path_macro)
     macro_win[u'開啟(&O)Button'].click()
 
-def tracepro_fast(path_macro):
+def tracepro_fast(path_macro, timeout=60):
     
     if os.path.exists(signal):
         os.remove(signal)
@@ -52,26 +53,47 @@ def tracepro_fast(path_macro):
     time.sleep(0.1)
 
     # 開啟 Polar 與 Rectangular Candela Plot
-    win.menu_select("&Analysis->Candela Plots->Polar Candela Distribution")
-    time.sleep(0.1)
-    win.menu_select("&Analysis->Candela Plots->Rectangular Candela Distribution")
-    time.sleep(0.1)
+    # win.menu_select("&Analysis->Candela Plots->Polar Candela Distribution")
+    # time.sleep(0.1)
+    # win.menu_select("&Analysis->Candela Plots->Rectangular Candela Distribution")
+    # time.sleep(0.1)
         
-
-    # 執行主 macro
-    load_macro(app, path_macro)
-    start_time = time.time()
-
-    if wait_file(signal):
-        #print("模擬完成")
+    while True:
+        # 開啟 Polar 與 Rectangular Candela Plot
+        win.menu_select("&Analysis->Candela Plots->Polar Candela Distribution")
         time.sleep(0.1)
-        load_macro(app, reset_path)
-        #print("已執行 Reset.scm 初始化")
-    else:
-        print("超時未完成")
+        win.menu_select("&Analysis->Candela Plots->Rectangular Candela Distribution")
+        time.sleep(0.1)
+        print("▶️ 執行模擬 macro:", os.path.basename(path_macro))
+        load_macro(app, path_macro)
 
-    #print("Tracepro Execution time:", round(time.time() - start_time, 2), "sec")
-    return os.path.exists(signal)
+        if wait_file(signal, timeout=timeout):
+            #print("✅ 模擬完成，執行 Reset.scm")
+            load_macro(app, reset_path)
+            return True
+
+        # 如果到這裡代表超時
+        print("⏰ 模擬超時，執行 Reset.scm 並重試")
+        load_macro(app, reset_path)
+        # 清掉重試前可能殘留的 signal
+        if os.path.exists(signal):
+            os.remove(signal)
+        # 休息一下再重試（可依需要調整）
+        time.sleep(1)
+    # 執行主 macro
+    # load_macro(app, path_macro)
+    # start_time = time.time()
+
+    # if wait_file(signal):
+    #     #print("模擬完成")
+    #     time.sleep(0.1)
+    #     load_macro(app, reset_path)
+    #     #print("已執行 Reset.scm 初始化")
+    # else:
+    #     print("超時未完成")
+    #     load_macro(app, reset_path)
+    # #print("Tracepro Execution time:", round(time.time() - start_time, 2), "sec")
+    # return os.path.exists(signal)
 
 # 執行
 # tracepro_fast(r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\Data\Sim.scm")

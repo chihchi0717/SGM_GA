@@ -4,14 +4,15 @@ import random
 import csv
 from draw_New import draw_
 from PYtoAutocad import Build_model
-from TracePro_fast import tracepro_fast
+from TracePro_fast import tracepro_fast, load_macro
 from txt_new import evaluate_fitness
 import time
 import shutil
+from pywinauto import application, findwindows
 # === ES 參數設定 ===
 POP_SIZE = 5         # μ
 OFFSPRING_SIZE = POP_SIZE  # λ
-N_GENERATIONS = 2
+N_GENERATIONS = 1
 
 # 基因範圍
 SIDE_BOUND = [0.4, 1]
@@ -29,7 +30,10 @@ np.random.seed(GLOBAL_SEED)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 save_root = os.path.join(BASE_DIR, "GA_population")
-fitness_log_path = os.path.join(r"C:\Users\User\OneDrive - NTHU\nuc", "fitness_log.csv")
+# fitness_log_path = os.path.join(r"C:\Users\User\OneDrive - NTHU\nuc", "fitness_log.csv")
+log_dir = os.path.join(r"C:\Users\User\OneDrive - NTHU\nuc")
+os.makedirs(log_dir, exist_ok=True)
+fitness_log_path = os.path.join(log_dir, "fitness_log.csv")
 
 # === 初始化 SCM 複製 ===
 def copy_scm_to_all_folders():
@@ -43,8 +47,8 @@ def copy_scm_to_all_folders():
         shutil.copy(scm_file, folder)
 
     # 子代資料夾 C1 ~ C(POP_SIZE*7)
-    for i in range(1, OFFSPRING_SIZE + 1):
-        folder = os.path.join(save_root, f"C{i}")
+    for i in range(POP_SIZE+1, POP_SIZE+OFFSPRING_SIZE+1 + 1):
+        folder = os.path.join(save_root, f"P{i}")
         os.makedirs(folder, exist_ok=True)
         shutil.copy(scm_file, folder)
 
@@ -88,20 +92,32 @@ def load_fitness_log():
         reader = csv.DictReader(f)
         return list(reader)
 
-def save_fitness_log(fitness_log):
+# def save_fitness_log(fitness_log):
+#     fieldnames = [
+#         "generation", "role", "parent_idx1", "parent_idx2",
+#         "S1", "S2", "A1",
+#         "sigma1", "sigma2", "sigma3",
+#         "fitness", "efficiency", "process_score"
+#     ] + [f"eff_{angle}" for angle in range(10, 90, 10)] + [
+#         "random_seed"
+#     ]
+#     with open(fitness_log_path, mode="w", newline="") as f:
+#         writer = csv.DictWriter(f, fieldnames=fieldnames)
+#         writer.writeheader()
+#         for row in fitness_log:
+#             writer.writerow(row)
+
+def save_fitness_log(fitness_log, path):
     fieldnames = [
         "generation", "role", "parent_idx1", "parent_idx2",
         "S1", "S2", "A1",
         "sigma1", "sigma2", "sigma3",
         "fitness", "efficiency", "process_score"
-    ] + [f"eff_{angle}" for angle in range(10, 90, 10)] + [
-        "random_seed"
-    ]
-    with open(fitness_log_path, mode="w", newline="") as f:
+    ] + [f"eff_{angle}" for angle in range(10, 90, 10)] + ["random_seed"]
+    with open(path, mode="w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
-        for row in fitness_log:
-            writer.writerow(row)
+        writer.writerows(fitness_log)
 
 def check_if_evaluated(fitness_log, individual):
     S1, S2, A1 = f"{individual[0]:.2f}", f"{individual[1]:.2f}", str((individual[2]))
@@ -140,7 +156,8 @@ def append_fitness(fitness_log, individual, sigma, fitness, efficiency, process_
         for angle, eff in zip(range(10, 90, 10), angle_effs):
             row[f"eff_{angle}"] = eff
     fitness_log.append(row)
-    save_fitness_log(fitness_log)
+    save_fitness_log(fitness_log, fitness_log_path)
+
 
 def get_last_completed_generation():
     fitness_log = load_fitness_log()
@@ -223,40 +240,35 @@ for g in range(start_gen, N_GENERATIONS):
             #     raise 
 
                 
-
+    app = application.Application().connect(path=r"C:\Program Files (x86)\Lambda Research Corporation\TracePro\TracePro.exe")
+    reset_path = os.path.join(BASE_DIR, "Macro", "Reset.scm")
     fitness_values = []
     for i, individual in enumerate(pop_genes):
         folder = os.path.join(save_root, f"P{i+1}")
         is_evaluated, eval_data = check_if_evaluated(fitness_log, individual)
         if is_evaluated:
             fitness, efficiency, process_score, angle_effs = eval_data
+        else:  
+            tracepro_fast(os.path.join(folder, "Sim.scm"))
+            fitness, efficiency, process_score, angle_effs = evaluate_fitness(folder, individual)
+        if(fitness is None or efficiency is None or process_score is None):
+            print(f"⚠️ 個體 {individual} 評估失敗，跳過後續模擬")
         else:
-            sim_success = False
-            while sim_success == False:
-                try:
-                    tracepro_fast(os.path.join(folder, "Sim.scm"))
-                    fitness, efficiency, process_score, angle_effs = evaluate_fitness(folder, individual)
-                    sim_success = True
-                except Exception as e:
-                    print(f"⚠️ tracepro/evaluate_fitness(parent {individual}) 失敗: {e}")
-                    time.sleep(1)
-                    # fitness, efficiency, process_score, angle_effs = 0.01, 0.0, 1.0, [0]*8
-
-        append_fitness(
-            fitness_log=fitness_log,
-            individual=individual,
-            sigma=pop_sigmas[i],
-            fitness=fitness,
-            efficiency=efficiency,
-            process_score=process_score,
-            generation=g + 1,
-            angle_effs=angle_effs,
-            role="parent",
-            parent_idx1=-1,
-            parent_idx2=-1,
-            seed=random.randint(0, 2**31)
-        )
-        fitness_values.append(fitness)
+            append_fitness(
+                fitness_log=fitness_log,
+                individual=individual,
+                sigma=pop_sigmas[i],
+                fitness=fitness,
+                efficiency=efficiency,
+                process_score=process_score,
+                generation=g + 1,
+                angle_effs=angle_effs,
+                role="parent",
+                parent_idx1=-1,
+                parent_idx2=-1,
+                seed=random.randint(0, 2**31)
+            )
+            fitness_values.append(fitness)
     fitness_values = np.array(fitness_values)
 
     # --- 產生 λ 個子代 (ES 突變) ---
@@ -294,7 +306,7 @@ for g in range(start_gen, N_GENERATIONS):
 
     # --- 評估子代：畫 CAD → 全部模擬 ---
     for i, individual in enumerate(children_genes):
-        folder = os.path.join(save_root, f"C{i+1}")   # <-- 改名稱不與 P 系列重複
+        folder = os.path.join(save_root, f"P{i+1}")   # <-- 改名稱不與 P 系列重複
         os.makedirs(folder, exist_ok=True)
         is_evaluated, _ = check_if_evaluated(fitness_log, individual)
         MAX_RETRY = 3  # 最多重試次數
@@ -314,7 +326,6 @@ for g in range(start_gen, N_GENERATIONS):
                     print(f"❌ Build_model 第 {attempt+1} 次失敗：{e}")
                 time.sleep(1)  # 等一秒再試（讓 AutoCAD 有時間反應）
 
-
             # if not build_success:
             #     print(f"❌ 個體 {individual} 多次建模失敗，跳過後續模擬")
             #     continue  # 或直接 return / raise Error 
@@ -326,15 +337,8 @@ for g in range(start_gen, N_GENERATIONS):
         if is_evaluated:
             fitness, efficiency, process_score, angle_effs = eval_data
         else:
-            sim_success = False
-            while sim_success == False:
-                try:
-                    tracepro_fast(os.path.join(folder, "Sim.scm"))
-                    fitness, efficiency, process_score, angle_effs = evaluate_fitness(folder, individual)
-                    sim_success = True
-                except Exception as e:
-                    print(f"⚠️ tracepro/evaluate_fitness(parent {individual}) 失敗: {e}")
-                    time.sleep(1)
+            tracepro_fast(os.path.join(folder, "Sim.scm"))
+            fitness, efficiency, process_score, angle_effs = evaluate_fitness(folder, individual)
 
         parent_idx1, parent_idx2 = children_parent_idxs[i]
         append_fitness(
@@ -388,5 +392,18 @@ for g in range(start_gen, N_GENERATIONS):
 
 
     print(f"★ Generation {g+1} 最佳個體: {pop_genes[-1]}, Fitness: {combined_fitness[best_indices[-1]]:.2f}")
+        
+    # 產生動態檔名並存檔
+    # 1) 過濾出這一代所有的 log 列
+    this_gen_rows = [row for row in fitness_log if int(row["generation"]) == g+1]
+    # 2) 計算最高 fitness
+    max_f = max(float(row["fitness"]) for row in this_gen_rows)
+    # 3) 組出檔名
+    fname = f"fitness_gen{g+1}_max{max_f:.2f}.csv"
+    out_path = os.path.join(log_dir, fname)
+    # 4) 存檔
+    save_fitness_log(fitness_log, out_path)
+    print(f"已儲存第 {g+1} 代紀錄到：{fname}")
+
 
 print("所有世代完成")
