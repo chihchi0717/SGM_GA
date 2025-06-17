@@ -16,7 +16,7 @@
 
     ;; 設定光源
     (edit:add-selection (tools:face-in-body 3 (entity 1)))
-    (property:apply-flux-surface-source (tools:face-in-body 3 (entity 1)) 100 1000 2 #f)
+    (property:apply-flux-surface-source (tools:face-in-body 3 (entity 1)) 0.3 1000 2 #f)
 
     ;; Candela Plot 設定
     (analysis:candela-normal (gvector 0 -1 0))
@@ -29,7 +29,7 @@
     (analysis:candela-distribution-min #f 0)
     (analysis:candela-distribution-log-plot #t)
     (analysis:candela-rect-distribution-angular-width 180)
-    (raytrace:set-radiometric-units-photometric)
+    (raytrace:set-radiometric-units-radiometric)
 
     ;; 主迴圈
     (define ang_ini 10) ; 初始角度

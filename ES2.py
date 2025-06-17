@@ -7,7 +7,7 @@ import shutil
 import time
 import re
 from datetime import datetime
-
+import gc
 # 假設這些是您自己的模組
 from draw_New import draw_
 from PYtoAutocad import Build_model
@@ -145,8 +145,27 @@ def check_if_evaluated(fitness_log, individual):
                 continue
     return False, None
 
+# === 初始化 SCM 複製 ===
+def copy_scm_to_all_folders():
+    macro_dir = os.path.join(BASE_DIR, "Macro")
+    scm_file = os.path.join(macro_dir, "Sim.scm")
+    print(f"複製 SCM 檔案: {scm_file}")
+    # 親代資料夾 P1 ~ P5
+    for i in range(1, POP_SIZE + 1):
+        folder = os.path.join(save_root, f"P{i}")
+        os.makedirs(folder, exist_ok=True)
+        shutil.copy(scm_file, folder)
+
+    # 子代資料夾 P1 ~ P(POP_SIZE*7)
+    for i in range(POP_SIZE+1, POP_SIZE+OFFSPRING_SIZE+1 + 1):
+        folder = os.path.join(save_root, f"P{i}")
+        os.makedirs(folder, exist_ok=True)
+        shutil.copy(scm_file, folder)
+
+
 
 def main():
+    copy_scm_to_all_folders()
     """主執行函式"""
     start_gen, last_gen_filepath = find_last_completed_generation(log_dir)
 
@@ -199,7 +218,15 @@ def main():
             if success:
                 folder = os.path.join(save_root, f"P{i+1}")
                 print(f"  模擬初始模型 P{i+1}...")
-                tracepro_fast(os.path.join(folder, "Sim.scm"))
+                sim_success = False
+                while sim_success == False:
+                    try:
+                        tracepro_fast(os.path.join(folder, "Sim.scm"))
+                        fitness, efficiency, process_score, angle_effs = evaluate_fitness(folder, individual)
+                        sim_success = True
+                    except Exception as e:
+                        print(f"⚠️ tracepro/evaluate_fitness(parent {individual}) 失敗: {e}")
+                        time.sleep(1)
 
         print("\n--- 步驟 3/3: 批次評估初始族群適應度 ---")
         initial_gen_log = []
@@ -328,7 +355,16 @@ def main():
             for i in needs_processing_indices:
                 folder = os.path.join(save_root, f"P{i+1}")
                 print(f"  模擬子代模型 P{i+1}...")
-                tracepro_fast(os.path.join(folder, "Sim.scm"))
+                sim_success = False
+                while sim_success == False:
+                    try:
+                        tracepro_fast(os.path.join(folder, "Sim.scm"))
+                        fitness, efficiency, process_score, angle_effs = evaluate_fitness(folder, individual)
+                        sim_success = True
+                    except Exception as e:
+
+                        print(f"⚠️ tracepro/evaluate_fitness(parent {individual}) 失敗: {e}")
+                        time.sleep(1)
 
             print(f"\n--- 步驟 4/4：計算 {len(needs_processing_indices)} 個新子代適應度 ---")
             for i in needs_processing_indices:
@@ -391,7 +427,8 @@ def main():
 
         print(f"★ Generation {current_gen} 完成。本代最佳 Fitness: {best_fitness_this_gen:.4f}")
         print(f"★ 日誌已存為: {output_filename}")
-
+        gc.collect()
+        
     print("\n🎉 所有世代執行完成！")
 
 if __name__ == "__main__":

@@ -224,7 +224,7 @@ def Build_model(sid_ang, mode="stair", folder="."):
     send_command_with_retry(acad, "Explode\nALL\n\n")
     send_command_with_retry(acad, "UNION\nALL\n\n")
     
-    light_source_length = 1
+    light_source_length = 0.5
     actual_array_top = top + (rows - 1) * (top - bottom)
     array_center_y = (actual_array_top + bottom) / 2
     # === Step: 儲存中心 y 座標 ===
@@ -233,7 +233,7 @@ def Build_model(sid_ang, mode="stair", folder="."):
     # with open(r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\file\center_y.txt", "w") as f:
     #     f.write(str(center_y))
 
-    center_x = round(Cx * scale + 1, 1)
+    center_x =round(Cx * scale + 1, 1)# 0 
     # with open(r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\file\center_x.txt", "w") as f:
     #     f.write(str(center_x))
     # 儲存 center_y 和 center_x
