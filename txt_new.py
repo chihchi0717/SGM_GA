@@ -38,8 +38,6 @@ def read_txt_file(file_path):
 
 # === 製程回歸模型 ===
 def compute_regression_score(S1, S2, A1):
-    S1 = S1 / 1000
-    S2 = S2 / 1000
     return (
         -0.067
         + 0.217 * S1
