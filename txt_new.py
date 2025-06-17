@@ -133,16 +133,16 @@ def evaluate_fitness(folder, individual, theta_u2=100, sigma_up=60, sigma_down=1
     return fitness, efficiency, process_score, efficiencies_per_angle
 
 
-fitness, efficiency, process_score, efficiencies_per_angle = evaluate_fitness(
-    "C:\\Users\\User\\SGM_GA\\GA_population\\P1",
-    [0.4, 0.4, 45],
-    theta_u2=100,
-    sigma_up=20,
-    sigma_down=15,
-    theta_d=90,
-)
-print(f"Fitness: {fitness:.4f}")
-print(f"Efficiency: {efficiency:.4f}")
-print(f"Process Score: {process_score:.4f}")
-efficiencies_per_angle = [float(x) for x in efficiencies_per_angle]
-print(f"Per-angle Efficiency: {efficiencies_per_angle}")
+# fitness, efficiency, process_score, efficiencies_per_angle = evaluate_fitness(
+#     "C:\\Users\\User\\SGM_GA\\GA_population\\P1",
+#     [0.4, 0.4, 45],
+#     theta_u2=100,
+#     sigma_up=20,
+#     sigma_down=15,
+#     theta_d=90,
+# )
+# print(f"Fitness: {fitness:.4f}")
+# print(f"Efficiency: {efficiency:.4f}")
+# print(f"Process Score: {process_score:.4f}")
+# efficiencies_per_angle = [float(x) for x in efficiencies_per_angle]
+# print(f"Per-angle Efficiency: {efficiencies_per_angle}")
