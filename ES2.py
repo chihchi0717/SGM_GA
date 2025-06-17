@@ -2,9 +2,14 @@ import os
 import numpy as np
 import random
 import csv
+import traceback
+import shutil
+import time
+
+# 假設這些是您自己的模組
 from draw_New import draw_
 from PYtoAutocad import Build_model
-from TracePro_fast import tracepro_fast, load_macro
+from TracePro_fast import tracepro_fast
 from txt_new import evaluate_fitness
 import time
 import shutil
@@ -13,8 +18,8 @@ from pywinauto import application, findwindows
 import smtplib
 import traceback
 from email.message import EmailMessage
-
-log_dir = r"C:\Users\user\OneDrive - NTHU\home"
+# 先定义好全局 log_dir
+log_dir = r"C:\Users\User\OneDrive - NTHU\nuc"
 
 def send_error(subject: str, body: str):
     try:
@@ -33,12 +38,12 @@ def send_error(subject: str, body: str):
         print(f"⚠️ OneDrive 写入失败，已写入本地：{fallback}")
 
 # === ES 參數設定 ===
-POP_SIZE = 5         # μ
-OFFSPRING_SIZE = POP_SIZE * 7 # λ
-N_GENERATIONS = 100
+POP_SIZE = 5         # μ (親代數量)
+OFFSPRING_SIZE = POP_SIZE *7 # λ (後代數量)
+N_GENERATIONS = 100  # 總共要執行的世代數
 
 # 基因範圍
-SIDE_BOUND = [0.4, 1]
+SIDE_BOUND = [0.4, 1.0]
 ANGLE_BOUND = [1, 179]
 
 # ES 自適應突變學習率 (n=3)
@@ -51,386 +56,323 @@ GLOBAL_SEED = 12
 random.seed(GLOBAL_SEED)
 np.random.seed(GLOBAL_SEED)
 
+# --- 路徑設定 ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 save_root = os.path.join(BASE_DIR, "GA_population")
 # fitness_log_path = os.path.join(r"C:\Users\User\OneDrive - NTHU\nuc", "fitness_log.csv")
-#log_dir = os.path.join(r"C:\Users\User\OneDrive - NTHU\nuc")
+log_dir = os.path.join(r"C:\Users\User\OneDrive - NTHU\nuc")
 os.makedirs(log_dir, exist_ok=True)
 fitness_log_path = os.path.join(log_dir, "fitness_log.csv")
+os.makedirs(save_root, exist_ok=True)
+os.makedirs(log_dir, exist_ok=True)
 
-# === 初始化 SCM 複製 ===
-def copy_scm_to_all_folders():
-    macro_dir = os.path.join(BASE_DIR, "Macro")
-    scm_file = os.path.join(macro_dir, "Sim.scm")
-    print(f"複製 SCM 檔案: {scm_file}")
-    # 親代資料夾 P1 ~ P5
-    for i in range(1, POP_SIZE + 1):
-        folder = os.path.join(save_root, f"P{i}")
-        os.makedirs(folder, exist_ok=True)
-        shutil.copy(scm_file, folder)
-
-    # 子代資料夾 C1 ~ C(POP_SIZE*7)
-    for i in range(POP_SIZE+1, POP_SIZE+OFFSPRING_SIZE+1 + 1):
-        folder = os.path.join(save_root, f"P{i}")
-        os.makedirs(folder, exist_ok=True)
-        shutil.copy(scm_file, folder)
-
-copy_scm_to_all_folders()
 
 # === 工具函式 ===
 
-def generate_valid_population(n_individuals):
-    population = []
-    attempts = 0
-    while len(population) < n_individuals and attempts < n_individuals * 10:
-        a = random.uniform(SIDE_BOUND[0], SIDE_BOUND[1])
-        b = random.uniform(SIDE_BOUND[0], SIDE_BOUND[1])
-        # A = random.randint(*ANGLE_BOUND)
-        A = random.uniform(ANGLE_BOUND[0], ANGLE_BOUND[1])
-        param = [a, b, A]
-        # 先 clamp，再交由 draw_ 檢查是否合法
-        param = clamp_gene(param)
-        try:
-            success, *_ = draw_(param, 1, 1, -1, -1, 0, 0)
-            if success:
-                population.append(param)
-        except Exception as e:
-            print(f"generate_valid_population: draw_({param}) 失敗: {e}")
-        attempts += 1
-    return np.array(population, dtype=float)
-
 def clamp_gene(child):
-    # 1) clip 让 child[0], child[1] 落在 [0.4, 1.0] 之间
-    child[0] = np.clip(child[0], SIDE_BOUND[0], SIDE_BOUND[1])
-    child[1] = np.clip(child[1], SIDE_BOUND[0], SIDE_BOUND[1])
-    # 2) 角度保持在 [1,179]，
-    child[2] = np.clip(child[2], ANGLE_BOUND[0], ANGLE_BOUND[1])
-
+    """將基因限制在合法範圍內並進行精度處理"""
+    child[0] = float(round(np.clip(child[0], SIDE_BOUND[0], SIDE_BOUND[1]), 2))
+    child[1] = float(round(np.clip(child[1], SIDE_BOUND[0], SIDE_BOUND[1]), 2))
+    child[2] = int(np.clip(child[2], ANGLE_BOUND[0], ANGLE_BOUND[1]))
     return child
 
 def load_fitness_log():
+    """從 CSV 讀取歷史紀錄"""
     if not os.path.exists(fitness_log_path):
         return []
-    with open(fitness_log_path, mode="r", newline="") as f:
-        reader = csv.DictReader(f)
-        return list(reader)
+    try:
+        with open(fitness_log_path, mode="r", newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            return list(reader)
+    except (IOError, csv.Error) as e:
+        print(f"⚠️ 讀取 fitness log 失敗: {e}. 將回傳空列表。")
+        return []
 
-# def save_fitness_log(fitness_log):
-#     fieldnames = [
-#         "generation", "role", "parent_idx1", "parent_idx2",
-#         "S1", "S2", "A1",
-#         "sigma1", "sigma2", "sigma3",
-#         "fitness", "efficiency", "process_score"
-#     ] + [f"eff_{angle}" for angle in range(10, 90, 10)] + [
-#         "random_seed"
-#     ]
-#     with open(fitness_log_path, mode="w", newline="") as f:
-#         writer = csv.DictWriter(f, fieldnames=fieldnames)
-#         writer.writeheader()
-#         for row in fitness_log:
-#             writer.writerow(row)
-
-def save_fitness_log(fitness_log, path):
+def save_fitness_log(fitness_log):
+    """將歷史紀錄寫入 CSV (更穩健的版本)"""
+    if not fitness_log:
+        return
     fieldnames = [
         "generation", "role", "parent_idx1", "parent_idx2",
         "S1", "S2", "A1",
         "sigma1", "sigma2", "sigma3",
         "fitness", "efficiency", "process_score"
     ] + [f"eff_{angle}" for angle in range(10, 90, 10)] + ["random_seed"]
-    with open(path, mode="w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+    
+    with open(fitness_log_path, mode="w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
         writer.writeheader()
         writer.writerows(fitness_log)
 
 def check_if_evaluated(fitness_log, individual):
-    S1, S2, A1 = f"{individual[0]:.2f}", f"{individual[1]:.2f}", str((individual[2]))
-    for row in fitness_log:
-        if row["S1"] == S1 and row["S2"] == S2 and row["A1"] == A1:
-            fitness = float(row["fitness"])
-            efficiency = float(row["efficiency"])
-            process_score = float(row["process_score"])
-            angle_effs = [float(row.get(f"eff_{angle}", 0)) for angle in range(10, 90, 10)]
-            return True, (fitness, efficiency, process_score, angle_effs)
+    """檢查個體是否已經被評估過，並回傳其數據"""
+    S1_check, S2_check, A1_check = f"{individual[0]:.2f}", f"{individual[1]:.2f}", str(int(individual[2]))
+    for row in reversed(fitness_log):
+        if row.get("S1") == S1_check and row.get("S2") == S2_check and row.get("A1") == A1_check:
+            try:
+                fitness = float(row["fitness"])
+                efficiency = float(row["efficiency"])
+                process_score = float(row["process_score"])
+                angle_effs = [float(row.get(f"eff_{angle}", 0.0)) for angle in range(10, 90, 10)]
+                return True, (fitness, efficiency, process_score, angle_effs)
+            except (ValueError, KeyError):
+                continue
     return False, None
 
-def append_fitness(fitness_log, individual, sigma, fitness, efficiency, process_score,
-                   generation, angle_effs=None, role="parent", parent_idx1=-1, parent_idx2=-1, seed=None):
-    S1 = f"{round(individual[0], 2):.2f}"
-    S2 = f"{round(individual[1], 2):.2f}"
-    A1 = str(int(individual[2]))
-    sigma1, sigma2, sigma3 = sigma
+def append_fitness(fitness_log, individual, sigma, fitness, efficiency, process_score, generation, angle_effs, role, parent_indices, seed=None):
+    """將新的評估結果加入歷史紀錄"""
+    S1_check, S2_check, A1_check = f"{individual[0]:.2f}", f"{individual[1]:.2f}", str(int(individual[2]))
+    for row in reversed(fitness_log):
+        if (row.get("generation") == str(generation) and
+            row.get("role") == role and
+            row.get("S1") == S1_check and
+            row.get("S2") == S2_check and
+            row.get("A1") == A1_check):
+            return 
+
+    p_idx1, p_idx2 = parent_indices
     row = {
         "generation": generation,
         "role": role,
-        "parent_idx1": parent_idx1,
-        "parent_idx2": parent_idx2,
-        "S1": S1,
-        "S2": S2,
-        "A1": A1,
-        "sigma1": sigma1,
-        "sigma2": sigma2,
-        "sigma3": sigma3,
-        "fitness": fitness,
-        "efficiency": efficiency,
-        "process_score": process_score,
+        "parent_idx1": p_idx1, "parent_idx2": p_idx2,
+        "S1": S1_check, "S2": S2_check, "A1": A1_check,
+        "sigma1": f"{sigma[0]:.6f}", "sigma2": f"{sigma[1]:.6f}", "sigma3": f"{sigma[2]:.6f}",
+        "fitness": f"{fitness:.6f}", "efficiency": f"{efficiency:.6f}", "process_score": f"{process_score:.6f}",
         "random_seed": seed if seed is not None else GLOBAL_SEED
     }
     if angle_effs:
         for angle, eff in zip(range(10, 90, 10), angle_effs):
-            row[f"eff_{angle}"] = eff
+            row[f"eff_{angle}"] = f"{eff:.6f}"
     fitness_log.append(row)
-    save_fitness_log(fitness_log, fitness_log_path)
+    save_fitness_log(fitness_log)
 
+def get_last_completed_generation(fitness_log):
+    """從歷史紀錄中獲取最後一個完成的世代編號"""
+    if not fitness_log: return 0
+    parent_gens = [int(row["generation"]) for row in fitness_log if row.get("role") == "parent" and row.get("generation")]
+    return max(parent_gens) if parent_gens else 0
 
-# def get_last_completed_generation():
-#     fitness_log = load_fitness_log()
-#     if not fitness_log:
-#         return 0
-#     return max(int(row["generation"]) for row in fitness_log if row["role"] == "parent")
 def get_last_completed_generation():
     fitness_log = load_fitness_log()
     if not fitness_log:
         return 0
+    return max(int(row["generation"]) for row in fitness_log if row["role"] == "parent")
 
-    parent_count = {}
-    offspring_count = {}
-    for row in fitness_log:
-        gen = int(row["generation"])
-        role = row["role"]
-        if role == "parent":
-            parent_count[gen] = parent_count.get(gen, 0) + 1
-        elif role == "offspring":
-            offspring_count[gen] = offspring_count.get(gen, 0) + 1
-
-    completed_gens = [
-        gen for gen in parent_count
-        if parent_count[gen] >= POP_SIZE and offspring_count.get(gen, 0) >= OFFSPRING_SIZE
-    ]
-
-    return max(completed_gens) if completed_gens else 0
-
-# === 主程式 ===
-def main():
-    start_gen = get_last_completed_generation()
     if start_gen == 0:
-        # 第一次執行：寫 run_config
-        config_path = os.path.join(save_root, "run_config.txt")
-        os.makedirs(save_root, exist_ok=True)
-        with open(config_path, "w", encoding="utf-8") as cf:
-            cf.write(f"POP_SIZE={POP_SIZE}\n")
-            cf.write(f"OFFSPRING_SIZE={OFFSPRING_SIZE}\n")
-            cf.write(f"N_GENERATIONS={N_GENERATIONS}\n")
-            cf.write(f"TAU_PRIME={TAU_PRIME}\n")
-            cf.write(f"TAU={TAU}\n")
-            cf.write(f"GLOBAL_SEED={GLOBAL_SEED}\n")
-            cf.write(f"SIDE_BOUND={SIDE_BOUND}\n")
-            cf.write(f"ANGLE_BOUND={ANGLE_BOUND}\n")
-    else:
-        print(f"🔁 從第 {start_gen+1} 代執行至第 {N_GENERATIONS} 代")
-
-    # 初始化族群
-    if start_gen == 0:
-        pop_genes = generate_valid_population(POP_SIZE)  # shape (μ, 3)，float array
-        sigma_side = (SIDE_BOUND[1] - SIDE_BOUND[0]) * 0.2
-        sigma_angle = 3
-        initial_sigmas = np.array([sigma_side, sigma_side, sigma_angle])
-        pop_sigmas = np.tile(initial_sigmas, (POP_SIZE, 1))  # shape (μ, 3)
-    else:
-        fitness_log = load_fitness_log()
-        prev_population = []
-        for row in fitness_log:
-            if int(row["generation"]) == start_gen and row["role"] == "parent":
-                prev_population.append([
-                    float(row["S1"]),
-                    float(row["S2"]),
-                    float(row["A1"])
-                ])
-        pop_genes = np.array(prev_population, dtype=float)
-        sigma_side = (SIDE_BOUND[1] - SIDE_BOUND[0]) * 0.2
-        sigma_angle = 3
-        initial_sigmas = np.array([sigma_side, sigma_side, sigma_angle])
-        pop_sigmas = np.tile(np.array([0.05*(SIDE_BOUND[1]-SIDE_BOUND[0]),
-                                    0.05*(SIDE_BOUND[1]-SIDE_BOUND[0]),
-                                    1.0]), (POP_SIZE, 1))
-
-    # 迭代主迴圈
-    for g in range(start_gen, N_GENERATIONS):
-        fitness_log = load_fitness_log()
-
-        # --- 評估父代：畫 CAD → 全部模擬 ---
+        print(f"🌱 從第 1 代全新開始執行")
+        pop_genes = np.zeros((POP_SIZE, n))
+        pop_genes[:, 0] = np.random.uniform(SIDE_BOUND[0], SIDE_BOUND[1], size=POP_SIZE)
+        pop_genes[:, 1] = np.random.uniform(SIDE_BOUND[0], SIDE_BOUND[1], size=POP_SIZE)
+        pop_genes[:, 2] = np.random.uniform(ANGLE_BOUND[0], ANGLE_BOUND[1], size=POP_SIZE)
+        for i in range(POP_SIZE):
+            pop_genes[i] = clamp_gene(pop_genes[i])
+        
+        sigma_side = (SIDE_BOUND[1] - SIDE_BOUND[0]) * 0.1
+        sigma_angle = (ANGLE_BOUND[1] - ANGLE_BOUND[0]) * 0.1
+        pop_sigmas = np.tile([sigma_side, sigma_side, sigma_angle], (POP_SIZE, 1))
+        
+        parent_eval_data = []
+        print("\n--- 建立與評估初始族群 ---")
+        # 初始族群仍然採用逐一處理的方式
         for i, individual in enumerate(pop_genes):
-            folder = os.path.join(save_root, f"P{i+1}")
+            folder = os.path.join(save_root, f"P_init_{i+1}") # 使用不同命名以避免與後代衝突
             os.makedirs(folder, exist_ok=True)
-            is_evaluated, _ = check_if_evaluated(fitness_log, individual)
-            MAX_RETRY = 3  # 最多重試次數
-
-            if not is_evaluated:
-                build_success = False
-                attempt = 0
-                while build_success == False:
-                    try:
-                        result, log = Build_model(individual, mode="triangle", folder=folder)
-                        for msg in log:
-                            print(msg)
-                        if result == 1:
-                            build_success = True
-                            break
-                    except Exception as e:
-                        print(f"❌ Build_model 第 {attempt+1} 次失敗：{e}")
-                    time.sleep(1)  # 等一秒再試（讓 AutoCAD 有時間反應）
-
-                # if not build_success:
-                #     print(f"❌ 個體 {individual} 多次建模失敗，跳過後續模擬")
-                #     raise 
-
-                    
-        app = application.Application().connect(path=r"C:\Program Files (x86)\Lambda Research Corporation\TracePro\TracePro.exe")
-        reset_path = os.path.join(BASE_DIR, "Macro", "Reset.scm")
-        fitness_values = []
-        for i, individual in enumerate(pop_genes):
-            folder = os.path.join(save_root, f"P{i+1}")
-            is_evaluated, eval_data = check_if_evaluated(fitness_log, individual)
-            if is_evaluated:
-                fitness, efficiency, process_score, angle_effs = eval_data
-            else:  
-                tracepro_fast(os.path.join(folder, "Sim.scm"))
-                fitness, efficiency, process_score, angle_effs = evaluate_fitness(folder, individual)
-            if(fitness is None or efficiency is None or process_score is None):
-                print(f"⚠️ 個體 {individual} 評估失敗，跳過後續模擬")
-            else:
-                append_fitness(
-                    fitness_log=fitness_log,
-                    individual=individual,
-                    sigma=pop_sigmas[i],
-                    fitness=fitness,
-                    efficiency=efficiency,
-                    process_score=process_score,
-                    generation=g + 1,
-                    angle_effs=angle_effs,
-                    role="parent",
-                    parent_idx1=-1,
-                    parent_idx2=-1,
-                    seed=random.randint(0, 2**31)
-                )
-                fitness_values.append(fitness)
-        fitness_values = np.array(fitness_values)
-
-        # --- 產生 λ 個子代 (ES 突變) ---
-        children_genes = []
-        children_sigmas = []
-        children_parent_idxs = []
-        for _ in range(OFFSPRING_SIZE):
-            idx = random.randint(0, POP_SIZE - 1)
-            parent_gene = pop_genes[idx].copy()
-            parent_sigma = pop_sigmas[idx].copy()
-
-            # ES 突變
-            new_sigma = parent_sigma * np.exp(
-                TAU_PRIME * np.random.randn() + TAU * np.random.randn(n)
-            )
-            new_sigma = np.maximum(new_sigma, 0.02)
-
-            # === 10% 機率，強制 reset 為大突變 ===
-            if random.random() < 0.1:
-                new_sigma = np.array([0.2, 0.2, 5.0])  # 重新擴大突變幅度
-
-            child_gene = parent_gene + new_sigma * np.random.randn(n)
-            child_gene = clamp_gene(child_gene)
-
-            # 列印 debug，確認不為 0
-            # print(f"DEBUG (child before clamp) : {parent_gene + new_sigma * np.random.randn(n)}")
-            # print(f"DEBUG (child after clamp)  : {child_gene}")
-
-            children_genes.append(child_gene)        # <-- **去掉 .astype(int)**
-            children_sigmas.append(new_sigma)
-            children_parent_idxs.append((idx, -1))
-
-        children_genes = np.array(children_genes, dtype=float)
-        children_sigmas = np.array(children_sigmas)
-
-        # --- 評估子代：畫 CAD → 全部模擬 ---
-        for i, individual in enumerate(children_genes):
-            folder = os.path.join(save_root, f"P{i+1}")   # <-- 改名稱不與 P 系列重複
-            os.makedirs(folder, exist_ok=True)
-            is_evaluated, _ = check_if_evaluated(fitness_log, individual)
-            MAX_RETRY = 3  # 最多重試次數
-
-            if not is_evaluated:
-                build_success = False
-                attempt = 0
-                while build_success == False:
-                    try:
-                        result, log = Build_model(individual, mode="triangle", folder=folder)
-                        for msg in log:
-                            print(msg)
-                        if result == 1:
-                            build_success = True
-                            break
-                    except Exception as e:
-                        print(f"❌ Build_model 第 {attempt+1} 次失敗：{e}")
-                    time.sleep(1)  # 等一秒再試（讓 AutoCAD 有時間反應）
-
-                # if not build_success:
-                #     print(f"❌ 個體 {individual} 多次建模失敗，跳過後續模擬")
-                #     continue  # 或直接 return / raise Error 
-
-        offspring_fitness = []
-        for i, individual in enumerate(children_genes):
-            folder = os.path.join(save_root, f"P{i+1}")
-            is_evaluated, eval_data = check_if_evaluated(fitness_log, individual)
-            if is_evaluated:
-                fitness, efficiency, process_score, angle_effs = eval_data
-            else:
-                tracepro_fast(os.path.join(folder, "Sim.scm"))
-                fitness, efficiency, process_score, angle_effs = evaluate_fitness(folder, individual)
-
-            parent_idx1, parent_idx2 = children_parent_idxs[i]
+            print(f"建立初始模型 P{i+1}")
+            Build_model(individual, mode="triangle", folder=folder)
+            print(f"模擬評估初始模型 P{i+1}")
+            tracepro_fast(os.path.join(folder, "Sim.scm"))
+            fitness, efficiency, process_score, angle_effs = evaluate_fitness(folder, individual)
+            
+            eval_data = (fitness, efficiency, process_score, angle_effs)
+            parent_eval_data.append(eval_data)
             append_fitness(
-                fitness_log=fitness_log,
-                individual=individual,
-                sigma=children_sigmas[i],
-                fitness=fitness,
-                efficiency=efficiency,
-                process_score=process_score,
-                generation=g + 1,
-                angle_effs=angle_effs,
-                role="offspring",
-                parent_idx1=parent_idx1,
-                parent_idx2=parent_idx2,
-                seed=random.randint(0, 2**31)
+                fitness_log, individual, pop_sigmas[i],
+                fitness, efficiency, process_score, 1, angle_effs, "parent", (-1, -1)
             )
-            offspring_fitness.append(fitness)
-        offspring_fitness = np.array(offspring_fitness)
+        start_gen = 1
+        
+    else:
+        print(f"🔁 從第 {start_gen + 1} 代繼續執行至第 {N_GENERATIONS} 代")
+        last_gen_parents_rows = [row for row in fitness_log if row.get("role") == "parent" and int(row.get("generation", 0)) == start_gen]
+        if len(last_gen_parents_rows) < POP_SIZE:
+                print(f"❌ 錯誤：第 {start_gen} 代的親代紀錄不完整 ({len(last_gen_parents_rows)}/{POP_SIZE})。請檢查 log 檔。")
+                return
 
-        # --- 合併 μ+λ，選出下一代 μ，最多保留 2 個相同基因 ---
+        pop_genes, pop_sigmas, parent_eval_data = [], [], []
+        print("\n--- 正在從 Log 恢復上一代親代狀態 ---")
+        for i, row in enumerate(last_gen_parents_rows):
+            try:
+                gene = [float(row["S1"]), float(row["S2"]), float(row["A1"])]
+                pop_genes.append(gene)
+                sigma = [float(row["sigma1"]), float(row["sigma2"]), float(row["sigma3"])]
+                pop_sigmas.append(sigma)
+                fitness = float(row["fitness"])
+                efficiency = float(row["efficiency"])
+                process_score = float(row["process_score"])
+                angle_effs = [float(row.get(f"eff_{angle}", 0.0)) for angle in range(10, 90, 10)]
+                parent_eval_data.append((fitness, efficiency, process_score, angle_effs))
+                append_fitness(
+                    fitness_log, gene, sigma,
+                    fitness, efficiency, process_score, start_gen+1,angle_effs, "parent", (-1, -1)
+                )
+                # 恢復時，不需要再 append_fitness，因為紀錄已經存在
+                print(f"  [DEBUG] 已恢復親代 {i}: Gene={gene}, Fitness={fitness:.4f}")
+            except (ValueError, KeyError) as e:
+                print(f"❌ 致命錯誤：恢復親代數據時，log 檔案中的行內容不完整或格式錯誤。錯誤: {e}")
+                print(f"  [DEBUG] 問題行: {row}")
+                return
+        pop_genes = np.array(pop_genes, dtype=float)
+        pop_sigmas = np.array(pop_sigmas, dtype=float)
+
+    # --- 演化主迴圈 ---
+    for g in range(start_gen, N_GENERATIONS):
+        current_gen = g + 1
+        print(f"\n{'='*25} GENERATION {current_gen} {'='*25}")
+        
+        fitness_log = load_fitness_log()
+        
+        print(f"ℹ️  第 {current_gen} 代開始，已載入 {len(pop_genes)} 個親代，其適應度已知。")
+
+        # --- 產生子代 ---
+        children_genes, children_sigmas, children_parent_idxs = [], [], []
+        for _ in range(OFFSPRING_SIZE):
+            parent_idx = random.randint(0, POP_SIZE - 1)
+            parent_gene, parent_sigma = pop_genes[parent_idx].copy(), pop_sigmas[parent_idx].copy()
+            new_sigma = parent_sigma * np.exp(TAU_PRIME * np.random.randn() + TAU * np.random.randn(n))
+            new_sigma = np.maximum(new_sigma, 0.02)
+            if random.random() < 0.1: new_sigma = np.array([0.2, 0.2, 5.0])
+            child_gene = clamp_gene(parent_gene + new_sigma * np.random.randn(n))
+            children_genes.append(child_gene)
+            children_sigmas.append(new_sigma)
+            children_parent_idxs.append((parent_idx, -1))
+
+        # =====================================================================
+        # === 核心修改：分階段處理子代 ===
+        # =====================================================================
+        offspring_eval_data = [None] * OFFSPRING_SIZE
+        needs_processing_indices = []
+
+        # --- 階段 1：檢查所有子代狀態，找出需要處理的新個體 ---
+        print("\n--- 步驟 1/4：檢查子代狀態 ---")
+        for i, individual in enumerate(children_genes):
+            is_evaluated, eval_data = check_if_evaluated(fitness_log, individual)
+            if is_evaluated:
+                print(f"  子代 P{i+1} 已在紀錄中，直接使用分數: {eval_data[0]:.4f}")
+                offspring_eval_data[i] = eval_data
+                fitness, efficiency, process_score, angle_effs = eval_data
+                append_fitness(
+                    fitness_log,
+                    individual,
+                    children_sigmas[i],  # 使用當前生成的子代的sigma
+                    fitness,
+                    efficiency,
+                    process_score,
+                    current_gen,
+                    angle_effs,
+                    "offspring",  # 角色是子代
+                    children_parent_idxs[i]
+                )
+            else:
+                print(f"  子代 P{i+1} 是新的，排入待處理佇列。")
+                needs_processing_indices.append(i)
+        
+        # --- 階段 2：為所有新個體建立模型 ---
+        print("\n--- 步驟 2/4：批次建立新子代模型 ---")
+        if not needs_processing_indices:
+            print("  所有子代皆已評估過，跳過此步驟。")
+        else:
+            for i in needs_processing_indices:
+                individual = children_genes[i]
+                folder = os.path.join(save_root, f"P{i+1}") 
+                os.makedirs(folder, exist_ok=True, )
+                print(f"  正在建立子代模型 P{i+1}...")
+                # Build_model(individual, mode="triangle", folder=folder)
+                build_success = False
+                attempt = 0
+                while build_success == False:
+                    try:
+                        result, log = Build_model(individual, mode="triangle", folder=folder)
+                        for msg in log:
+                            print(msg)
+                        if result == 1:
+                            build_success = True
+                            break
+                    except Exception as e:
+                        print(f"❌ Build_model 第 {attempt+1} 次失敗：{e}")
+                    time.sleep(1)  # 等一秒再試（讓 AutoCAD 有時間反應）
+
+        # --- 階段 3：為所有新個體執行模擬 ---
+        print("\n--- 步驟 3/4：批次執行新子代模擬 ---")
+        if not needs_processing_indices:
+            print("  所有子代皆已評估過，跳過此步驟。")
+        else:
+            for i in needs_processing_indices:
+                folder = os.path.join(save_root, f"P{i+1}")
+                print(f"  正在模擬評估子代 P{i+1}...")
+                tracepro_fast(os.path.join(folder, "Sim.scm"))
+
+        # --- 階段 4：計算新個體的適應度並寫入紀錄 ---
+        print("\n--- 步驟 4/4：計算適應度與紀錄 ---")
+        if not needs_processing_indices:
+            print("  所有子代皆已評估過，跳過此步驟。")
+        else:
+            for i in needs_processing_indices:
+                individual = children_genes[i]
+                folder = os.path.join(save_root, f"P{i+1}")
+                print(f"  正在計算子代 P{i+1} 的適應度...")
+                fitness, efficiency, process_score, angle_effs = evaluate_fitness(folder, individual)
+                
+                eval_data = (fitness, efficiency, process_score, angle_effs)
+                offspring_eval_data[i] = eval_data  # 將新計算出的結果填入
+                
+                # 將新結果寫入日誌
+                append_fitness(
+                    fitness_log, individual, children_sigmas[i],
+                    fitness, efficiency, process_score, current_gen, angle_effs, "offspring",
+                    children_parent_idxs[i]
+                )
+        
+        # 安全檢查，確保所有子代都有評估數據
+        if any(data is None for data in offspring_eval_data):
+            raise RuntimeError(f"嚴重錯誤：在第 {current_gen} 代，並非所有子代都成功獲得評估數據！")
+
+        # --- (μ+λ) 選擇 ---
+        print("\n--- 選擇下一代 ---")
         combined_genes = np.vstack([pop_genes, children_genes])
         combined_sigmas = np.vstack([pop_sigmas, children_sigmas])
-        combined_fitness = np.hstack([fitness_values, offspring_fitness])
+        combined_eval_data = parent_eval_data + offspring_eval_data
+        combined_fitness = [d[0] for d in combined_eval_data]
 
-        # 先將所有個體依 fitness 排序（由大到小）
         sorted_idx = np.argsort(combined_fitness)[::-1]
 
-        new_parents = []
-        new_sigmas = []
-        count_dict = {}   # 用來記錄同一組基因已經選過幾次
-        MAX_DUPLICATE = 2 # 最多允許同一 (S1,S2,A1) 出現 2 次
-
+        new_parents, new_sigmas, new_eval_data, count_dict = [], [], [], {}
+        MAX_DUPLICATE = 2
+        selected_indices = set()
+        
+        # 第一輪：根據多樣性選擇
         for idx in sorted_idx:
-            if len(new_parents) >= POP_SIZE:
-                break
-
+            if len(new_parents) >= POP_SIZE: break
             gene = combined_genes[idx]
-            # 基因取值用 clamp_gene 相同的精度：S1, S2 取到小數第 2 位，A1 取整數
             key = (round(gene[0], 2), round(gene[1], 2), int(gene[2]))
             count = count_dict.get(key, 0)
-
             if count < MAX_DUPLICATE:
                 new_parents.append(gene)
                 new_sigmas.append(combined_sigmas[idx])
+                new_eval_data.append(combined_eval_data[idx])
                 count_dict[key] = count + 1
+                selected_indices.add(idx)
 
-        # 最後把 new_parents、new_sigmas 轉回 numpy array
-        best_indices = np.argsort(combined_fitness)[-POP_SIZE:]
+        # 核心修正：增加了補位邏輯，確保親代數量永遠足夠
+        if len(new_parents) < POP_SIZE:
+            print(f"⚠️ 多樣性限制後只選出 {len(new_parents)} 個，將從剩餘最佳個體中補滿。")
+            for idx in sorted_idx:
+                if len(new_parents) >= POP_SIZE: break
+                if idx not in selected_indices:
+                    new_parents.append(combined_genes[idx])
+                    new_sigmas.append(combined_sigmas[idx])
+                    new_eval_data.append(combined_eval_data[idx])
+
+        # 更新族群狀態，為下一個迴圈做準備
         pop_genes = np.array(new_parents, dtype=float)
         pop_sigmas = np.array(new_sigmas, dtype=float)
 
@@ -457,7 +399,7 @@ from datetime import datetime
 # … 其他 imports …
 
 # 先定义好全局 log_dir
-#log_dir = r"C:\Users\User\OneDrive - NTHU\nuc"
+log_dir = r"C:\Users\User\OneDrive - NTHU\nuc"
 
 def send_error(subject: str, body: str):
     try:
@@ -478,11 +420,6 @@ def send_error(subject: str, body: str):
 if __name__ == "__main__":
     try:
         main()
-    except Exception:
-        import traceback
-        tb = traceback.format_exc()
-        print("❌ 捕获到主程式异常：", tb)
-        # 强制调用一次测试写日志
-        send_error("[TEST] ES2.py 錯誤通知", tb)
-        # 重新抛出，让程序看到错误
-        raise
+    except Exception as e:
+        print(f"❌ 主程式發生致命錯誤: {e}")
+        traceback.print_exc()
