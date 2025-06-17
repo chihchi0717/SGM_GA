@@ -13,6 +13,8 @@ def gaussian_weight(theta, center, sigma, theta_min=None, theta_max=None, peak=1
         return 0.0
     return base + peak * np.exp(-((theta - center) ** 2) / (2 * sigma**2))
 
+def down_gaussian_weight(theta, sigma, theta_min=None, theta_max=None, peak=1.0, base=0.0):
+    return -np.exp(-((theta) ** 2) / (2 * sigma**2))
 
 # === Polar txt 讀取 ===
 def read_txt_file(file_path):
@@ -51,9 +53,7 @@ def compute_regression_score(S1, S2, A1):
 
 
 # === 加權導光效率計算 ===
-def evaluate_fitness(
-    folder, individual, theta_u2=100, sigma_up=60, sigma_down=15, theta_d=22
-):
+def evaluate_fitness(folder, individual, theta_u2=100, sigma_up=60, sigma_down=15, theta_d=22):
     S1, S2, A1 = individual
     weighted_efficiency_total = 0
     weight_sum = 0
@@ -65,7 +65,7 @@ def evaluate_fitness(
         txt_path = os.path.join(folder, f"polar-{angle}.txt")
         try:
             angles, intensities = read_txt_file(txt_path)
-            if len(angles) == 0:
+            if len(angles) == 0 :
                 continue
 
             total_energy = np.sum(intensities)
@@ -73,25 +73,33 @@ def evaluate_fitness(
             weight_debug_sum = 0  # 為了印出此角度的權重總和
 
             for theta, flux in zip(angles, intensities):
-                if theta > theta_d:
+                # 預設權重為 0，避免意外錯誤導致 w 未定義
+                if theta > 90:
                     # 向上光線，θ > 90°
                     w = gaussian_weight(
-                        theta, 
-                        center=theta_u2, 
+                        theta,
+                        center=theta_u2,
                         sigma=sigma_up,
-                        theta_min=theta_d, 
-                        theta_max=180, 
-                        peak=0.5, 
-                        base=0.5)
-
-                else:
+                        theta_min=90,
+                        theta_max=180,
+                        peak=0.5,
+                        base=0.5,
+                    )
+                elif theta >= 22 and theta < 90:
+                    # 超過 theta_d 之後給予負權重
+                    w = -0.01
+                elif theta < theta_d:
+                    # 角度處於 [0, theta_d] 範圍內時不扣分
                     w = 0.5 * gaussian_weight(
                         theta,
                         center=0,
-                        sigma=sigma_down,
+                        sigma=sigma_up,
                         theta_min=0,
                         theta_max=theta_d,
+                        peak=0.5,
+                        base=0.5,
                     )
+
                 weighted_energy += flux * w
                 weight_debug_sum += w
                 print(f"    θ = {theta:6.1f}°, flux = {flux:.4e}, weight = {w:.4f}")
@@ -125,16 +133,16 @@ def evaluate_fitness(
     return fitness, efficiency, process_score, efficiencies_per_angle
 
 
-# fitness, efficiency, process_score, efficiencies_per_angle = evaluate_fitness(
-#     "C:\\Users\\cchih\\Desktop\\NTHU\\MasterThesis\\research_log\\202506\\0615\\index1.2536",
-#     [400, 400, 45],
-#     theta_u2=100,
-#     sigma_up=20,
-#     sigma_down=15,
-#     theta_d=90,
-# )
-# print(f"Fitness: {fitness:.4f}")
-# print(f"Efficiency: {efficiency:.4f}")
-# print(f"Process Score: {process_score:.4f}")
-# efficiencies_per_angle = [float(x) for x in efficiencies_per_angle]
-# print(f"Per-angle Efficiency: {efficiencies_per_angle}")
+fitness, efficiency, process_score, efficiencies_per_angle = evaluate_fitness(
+    "C:\\Users\\User\\SGM_GA\\GA_population\\P1",
+    [0.4, 0.4, 45],
+    theta_u2=100,
+    sigma_up=20,
+    sigma_down=15,
+    theta_d=90,
+)
+print(f"Fitness: {fitness:.4f}")
+print(f"Efficiency: {efficiency:.4f}")
+print(f"Process Score: {process_score:.4f}")
+efficiencies_per_angle = [float(x) for x in efficiencies_per_angle]
+print(f"Per-angle Efficiency: {efficiencies_per_angle}")
