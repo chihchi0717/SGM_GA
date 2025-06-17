@@ -21,22 +21,6 @@ from email.message import EmailMessage
 # 先定义好全局 log_dir
 log_dir = r"C:\Users\User\OneDrive - NTHU\nuc"
 
-def send_error(subject: str, body: str):
-    try:
-        err_dir = os.path.join(log_dir, "ES2_ErrorLogs")
-        os.makedirs(err_dir, exist_ok=True)
-        log_path = os.path.join(err_dir, "es2_error.log")
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        with open(log_path, "a", encoding="utf-8") as f:
-            f.write(f"[{ts}] {subject}\n{body}\n{'='*60}\n")
-        print(f"⚠️ 已把错误日志存到：{log_path}")
-    except Exception as write_err:
-        # 写入 OneDrive 失败，退回写到当前工作目录
-        fallback = os.path.join(os.getcwd(), "es2_error_fallback.log")
-        with open(fallback, "a", encoding="utf-8") as f:
-            f.write(f"[{datetime.now().isoformat()}] {subject}\n{body}\n{'='*60}\n")
-        print(f"⚠️ OneDrive 写入失败，已写入本地：{fallback}")
-
 # === ES 參數設定 ===
 POP_SIZE = 5         # μ (親代數量)
 OFFSPRING_SIZE = POP_SIZE *7 # λ (後代數量)
