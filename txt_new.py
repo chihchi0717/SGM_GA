@@ -126,8 +126,9 @@ def evaluate_fitness(folder, individual):
     except Exception as e:
         print(f"⚠️ 製程品質評估失敗: {e}")
         process_score = 1.0
-
-    fitness = efficiency * (1 / (1 + process_score))
+    
+    w = 2
+    fitness = efficiency * (1 / (1 + w * process_score))
 
     return fitness, efficiency, process_score, efficiencies_per_angle
 
