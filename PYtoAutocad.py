@@ -184,7 +184,9 @@ class PrismBuilder:
     # Public API
     # ------------------------------------------------------------------
     def build(self, sid_ang, mode: str, paths: OutputPaths) -> None:
-        side_a, side_b, angle_B = sid_ang
+        side_a = round(sid_ang[0], 2)
+        side_b = round(sid_ang[1], 2)
+        angle_B = sid_ang[2]
         A, B, C, Cx, Cy, Ix, Iy = self._triangle_points(side_a, side_b, angle_B)
 
         slope_ac = Cy / Cx if Cx != 0 else 0
@@ -263,6 +265,7 @@ class PrismBuilder:
 
 def Build_model(sid_ang, mode: str = "stair", folder: str = "."):
     """Legacy wrapper for building a prism model."""
+    sid_ang = [round(sid_ang[0], 2), round(sid_ang[1], 2), sid_ang[2]]
     paths = OutputPaths(folder)
     for p in [paths.sat_path, paths.dwg_path]:
         if os.path.exists(p):

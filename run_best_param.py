@@ -9,7 +9,7 @@ ANGLE_WEIGHTS = [1, 2, 5, 7, 5, 8.5, 1.5, 2]
 
 
 def main():
-    sid_ang = [0.48, 0.98, 85]
+    sid_ang = [0.46, 0.95, 85]
     base_dir = os.path.dirname(os.path.abspath(__file__))
     folder = os.path.join(base_dir, "GA_population", "best_param")
     os.makedirs(folder, exist_ok=True)
