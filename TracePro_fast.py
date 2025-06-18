@@ -3,10 +3,7 @@ import time, os
 
 import warnings
 
-warnings.filterwarnings(
-    "ignore",
-    message=".*32-bit application should be automated.*"
-)
+warnings.filterwarnings("ignore", message=".*32-bit application should be automated.*")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 signal = os.path.join(BASE_DIR, "Macro", "completion_signal.OML")
@@ -18,6 +15,7 @@ sim_path = os.path.join(BASE_DIR, "Macro", "Sim.scm")
 # print("== exists signal?", os.path.exists(signal))
 # print("== exists reset_path?", os.path.exists(reset_path))
 
+
 def wait_file(path, timeout=60):
     start = time.time()
     while not os.path.exists(path):
@@ -26,30 +24,33 @@ def wait_file(path, timeout=60):
         time.sleep(0.2)
     return True
 
-def load_macro(app, path_macro):
-    afxc = app[u'Afx:400000:8:10003:0:bf0aa1'].wait('ready')
-    # afxc.menu_item(u'&Window->&1 Model:[initiate.OML]').select()
-    afxc.menu_select(u'&Window->&1 Model:[initiate.OML]')
-    
 
-    app.window(title_re=".*TracePro.*").menu_item(u'&Macros->&Execute').select()
-    w_handle = findwindows.find_windows(title=u'Select macro file to Load/Execute')[0]
+def load_macro(app, path_macro):
+    afxc = app["Afx:400000:8:10003:0:bf0aa1"].wait("ready")
+    # afxc.menu_item(u'&Window->&1 Model:[initiate.OML]').select()
+    afxc.menu_select("&Window->&1 Model:[initiate.OML]")
+
+    app.window(title_re=".*TracePro.*").menu_item("&Macros->&Execute").select()
+    w_handle = findwindows.find_windows(title="Select macro file to Load/Execute")[0]
     macro_win = app.window(handle=w_handle)
-    macro_win[u'檔案名稱(&N):Edit'].set_edit_text(path_macro)
-    macro_win[u'開啟(&O)Button'].click()
+    macro_win["檔案名稱(&N):Edit"].set_edit_text(path_macro)
+    macro_win["開啟(&O)Button"].click()
+
 
 def tracepro_fast(path_macro, timeout=60):
-    
+
     if os.path.exists(signal):
         os.remove(signal)
 
     # TRACEPRO_EXE = os.environ.get("TRACEPRO_PATH",
     #     r"C:\Program Files (x86)\Lambda Research Corporation\TracePro\TracePro.exe"
     # )
-    #app = application.Application().connect(path=TRACEPRO_EXE)
-    app = application.Application().connect(path=r"C:\Program Files (x86)\Lambda Research Corporation\TracePro\TracePro.exe")
+    # app = application.Application().connect(path=TRACEPRO_EXE)
+    app = application.Application().connect(
+        path=r"C:\Program Files (x86)\Lambda Research Corporation\TracePro\TracePro.exe"
+    )
     win = app.window(title_re=".*TracePro.*")
-    win.wait('ready')
+    win.wait("ready")
     time.sleep(0.1)
 
     # 開啟 Polar 與 Rectangular Candela Plot
@@ -57,7 +58,7 @@ def tracepro_fast(path_macro, timeout=60):
     # time.sleep(0.1)
     # win.menu_select("&Analysis->Candela Plots->Rectangular Candela Distribution")
     # time.sleep(0.1)
-        
+
     while True:
         # 開啟 Polar 與 Rectangular Candela Plot
         win.menu_select("&Analysis->Candela Plots->Polar Candela Distribution")
@@ -68,7 +69,7 @@ def tracepro_fast(path_macro, timeout=60):
         load_macro(app, path_macro)
 
         if wait_file(signal, timeout=timeout):
-            #print("✅ 模擬完成，執行 Reset.scm")
+            # print("✅ 模擬完成，執行 Reset.scm")
             load_macro(app, reset_path)
             return True
 
@@ -76,7 +77,7 @@ def tracepro_fast(path_macro, timeout=60):
         print("⏰ 模擬超時，執行 Reset.scm 並重試")
         load_macro(app, reset_path)
         time.sleep(5)
-        macro_win[u'開啟(&O)Button'].click()
+        win["開啟(&O)Button"].click()
         # 清掉重試前可能殘留的 signal
         # if os.path.exists(signal):
         #     os.remove(signal)
@@ -96,6 +97,7 @@ def tracepro_fast(path_macro, timeout=60):
     #     load_macro(app, reset_path)
     # #print("Tracepro Execution time:", round(time.time() - start_time, 2), "sec")
     # return os.path.exists(signal)
+
 
 # 執行
 # tracepro_fast(r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\Data\Sim.scm")

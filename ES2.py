@@ -8,6 +8,7 @@ import time
 import re
 from datetime import datetime
 import gc
+
 # 假設這些是您自己的模組
 from draw_New import draw_
 from PYtoAutocad import Build_model
@@ -20,8 +21,8 @@ import smtplib
 from email.message import EmailMessage
 
 # === ES 參數設定 ===
-POP_SIZE = 5      # μ (親代數量)
-OFFSPRING_SIZE = POP_SIZE * 7 # λ (後代數量)
+POP_SIZE = 5  # μ (親代數量)
+OFFSPRING_SIZE = POP_SIZE * 7  # λ (後代數量)
 N_GENERATIONS = 100  # 總共要執行的世代數
 
 # 基因範圍
@@ -42,7 +43,7 @@ np.random.seed(GLOBAL_SEED)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 save_root = os.path.join(BASE_DIR, "GA_population")
 # 【保留您的變數】使用 log_dir 作為日誌的根目錄
-log_dir = r"C:\Users\User\OneDrive - NTHU\nuc"
+log_dir = r"C:\Users\cchih\OneDrive - NTHU\msi"
 os.makedirs(save_root, exist_ok=True)
 os.makedirs(log_dir, exist_ok=True)
 
@@ -67,6 +68,7 @@ def send_error(subject: str, body: str):
 
 # === 工具函式 (分代日誌系統) ===
 
+
 def clamp_gene(child):
     """將基因限制在合法範圍內並進行精度處理"""
     child[0] = float(round(np.clip(child[0], SIDE_BOUND[0], SIDE_BOUND[1]), 2))
@@ -74,52 +76,77 @@ def clamp_gene(child):
     child[2] = int(np.clip(child[2], ANGLE_BOUND[0], ANGLE_BOUND[1]))
     return child
 
+
 def save_generation_log(generation_data, file_path):
     """將單一世代的歷史紀錄寫入指定的 CSV"""
     if not generation_data:
         return
-    fieldnames = [
-        "generation", "role", "parent_idx1", "parent_idx2",
-        "S1", "S2", "A1",
-        "sigma1", "sigma2", "sigma3",
-        "fitness", "efficiency", "process_score"
-    ] + [f"eff_{angle}" for angle in range(10, 90, 10)] + ["random_seed"]
-    
+    fieldnames = (
+        [
+            "generation",
+            "role",
+            "parent_idx1",
+            "parent_idx2",
+            "S1",
+            "S2",
+            "A1",
+            "sigma1",
+            "sigma2",
+            "sigma3",
+            "fitness",
+            "efficiency",
+            "process_score",
+        ]
+        + [f"eff_{angle}" for angle in range(10, 90, 10)]
+        + ["random_seed"]
+    )
+
     try:
         with open(file_path, mode="w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
+            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
             writer.writeheader()
             writer.writerows(generation_data)
     except IOError as e:
         print(f"❌ 寫入日誌檔 {file_path} 失敗: {e}")
 
-def create_log_row(individual, sigma, fitness_data, generation, role, parent_indices, seed=None):
+
+def create_log_row(
+    individual, sigma, fitness_data, generation, role, parent_indices, seed=None
+):
     """建立一筆日誌紀錄的字典物件"""
     fitness, efficiency, process_score, angle_effs = fitness_data
     p_idx1, p_idx2 = parent_indices
     row = {
         "generation": generation,
         "role": role,
-        "parent_idx1": p_idx1, "parent_idx2": p_idx2,
-        "S1": f"{individual[0]:.2f}", "S2": f"{individual[1]:.2f}", "A1": str(int(individual[2])),
-        "sigma1": f"{sigma[0]:.6f}", "sigma2": f"{sigma[1]:.6f}", "sigma3": f"{sigma[2]:.6f}",
-        "fitness": f"{fitness:.6f}", "efficiency": f"{efficiency:.6f}", "process_score": f"{process_score:.6f}",
-        "random_seed": seed if seed is not None else GLOBAL_SEED
+        "parent_idx1": p_idx1,
+        "parent_idx2": p_idx2,
+        "S1": f"{individual[0]:.2f}",
+        "S2": f"{individual[1]:.2f}",
+        "A1": str(int(individual[2])),
+        "sigma1": f"{sigma[0]:.6f}",
+        "sigma2": f"{sigma[1]:.6f}",
+        "sigma3": f"{sigma[2]:.6f}",
+        "fitness": f"{fitness:.6f}",
+        "efficiency": f"{efficiency:.6f}",
+        "process_score": f"{process_score:.6f}",
+        "random_seed": seed if seed is not None else GLOBAL_SEED,
     }
     if angle_effs:
         for angle, eff in zip(range(10, 90, 10), angle_effs):
             row[f"eff_{angle}"] = f"{eff:.6f}"
     return row
 
+
 def find_last_completed_generation(directory):
     """從日誌目錄掃描所有檔案，找到最新的世代編號和對應的檔案路徑"""
     if not os.path.exists(directory):
         return 0, None
-    
+
     pattern = re.compile(r"fitness_gen(\d+)_max.*\.csv")
     last_gen = 0
     last_gen_filepath = None
-    
+
     for filename in os.listdir(directory):
         match = pattern.match(filename)
         if match:
@@ -127,23 +154,35 @@ def find_last_completed_generation(directory):
             if gen_num > last_gen:
                 last_gen = gen_num
                 last_gen_filepath = os.path.join(directory, filename)
-                
+
     return last_gen, last_gen_filepath
+
 
 def check_if_evaluated(fitness_log, individual):
     """檢查個體是否已經被評估過，並回傳其數據"""
-    S1_check, S2_check, A1_check = f"{individual[0]:.2f}", f"{individual[1]:.2f}", str(int(individual[2]))
+    S1_check, S2_check, A1_check = (
+        f"{individual[0]:.2f}",
+        f"{individual[1]:.2f}",
+        str(int(individual[2])),
+    )
     for row in reversed(fitness_log):
-        if row.get("S1") == S1_check and row.get("S2") == S2_check and row.get("A1") == A1_check:
+        if (
+            row.get("S1") == S1_check
+            and row.get("S2") == S2_check
+            and row.get("A1") == A1_check
+        ):
             try:
                 fitness = float(row["fitness"])
                 efficiency = float(row["efficiency"])
                 process_score = float(row["process_score"])
-                angle_effs = [float(row.get(f"eff_{angle}", 0.0)) for angle in range(10, 90, 10)]
+                angle_effs = [
+                    float(row.get(f"eff_{angle}", 0.0)) for angle in range(10, 90, 10)
+                ]
                 return True, (fitness, efficiency, process_score, angle_effs)
             except (ValueError, KeyError):
                 continue
     return False, None
+
 
 # === 初始化 SCM 複製 ===
 def copy_scm_to_all_folders():
@@ -157,11 +196,10 @@ def copy_scm_to_all_folders():
         shutil.copy(scm_file, folder)
 
     # 子代資料夾 P1 ~ P(POP_SIZE*7)
-    for i in range(POP_SIZE+1, POP_SIZE+OFFSPRING_SIZE+1 + 1):
+    for i in range(POP_SIZE + 1, POP_SIZE + OFFSPRING_SIZE + 1 + 1):
         folder = os.path.join(save_root, f"P{i}")
         os.makedirs(folder, exist_ok=True)
         shutil.copy(scm_file, folder)
-
 
 
 def main():
@@ -178,41 +216,46 @@ def main():
         pop_genes = np.zeros((POP_SIZE, n))
         pop_genes[:, 0] = np.random.uniform(SIDE_BOUND[0], SIDE_BOUND[1], size=POP_SIZE)
         pop_genes[:, 1] = np.random.uniform(SIDE_BOUND[0], SIDE_BOUND[1], size=POP_SIZE)
-        pop_genes[:, 2] = np.random.uniform(ANGLE_BOUND[0], ANGLE_BOUND[1], size=POP_SIZE)
+        pop_genes[:, 2] = np.random.uniform(
+            ANGLE_BOUND[0], ANGLE_BOUND[1], size=POP_SIZE
+        )
         for i in range(POP_SIZE):
             pop_genes[i] = clamp_gene(pop_genes[i])
-        
+
         sigma_side = (SIDE_BOUND[1] - SIDE_BOUND[0]) * 0.1
         sigma_angle = (ANGLE_BOUND[1] - ANGLE_BOUND[0]) * 0.1
         pop_sigmas = np.tile([sigma_side, sigma_side, sigma_angle], (POP_SIZE, 1))
-        
+
         # 【修改】批次處理初始族群
         print("\n--- 建立與評估初始族群 (第 1 代的親代) ---")
-        
+
         build_results = [False] * POP_SIZE
         print("\n--- 步驟 1/3: 批次建立初始族群模型 ---")
         for i, individual in enumerate(pop_genes):
             folder = os.path.join(save_root, f"P{i+1}")
             os.makedirs(folder, exist_ok=True)
             print(f"  建立初始模型 P{i+1}...")
-            
+
             build_success = False
             attempt = 0
             while not build_success and attempt < 3:
                 try:
-                    result, log = Build_model(individual, mode="triangle", folder=folder)
-                    for msg in log: print(msg)
+                    result, log = Build_model(
+                        individual, mode="triangle", folder=folder
+                    )
+                    for msg in log:
+                        print(msg)
                     if result == 1:
                         build_success = True
                 except Exception as e:
                     print(f"❌ Build_model 第 {attempt+1} 次失敗：{e}")
                     attempt += 1
                     time.sleep(1)
-            
+
             build_results[i] = build_success
             if not build_success:
-                 print(f"❌ 建立模型 P{i+1} 最終失敗。")
-        
+                print(f"❌ 建立模型 P{i+1} 最終失敗。")
+
         print("\n--- 步驟 2/3: 批次模擬初始族群模型 ---")
         for i, success in enumerate(build_results):
             if success:
@@ -222,48 +265,61 @@ def main():
                 while sim_success == False:
                     try:
                         tracepro_fast(os.path.join(folder, "Sim.scm"))
-                        fitness, efficiency, process_score, angle_effs = evaluate_fitness(folder, individual)
+                        fitness, efficiency, process_score, angle_effs = (
+                            evaluate_fitness(folder, individual)
+                        )
                         sim_success = True
                     except Exception as e:
-                        print(f"⚠️ tracepro/evaluate_fitness(parent {individual}) 失敗: {e}")
+                        print(
+                            f"⚠️ tracepro/evaluate_fitness(parent {individual}) 失敗: {e}"
+                        )
                         time.sleep(1)
 
         print("\n--- 步驟 3/3: 批次評估初始族群適應度 ---")
         initial_gen_log = []
-        parent_eval_data = [] # 重新建立
+        parent_eval_data = []  # 重新建立
         for i, individual in enumerate(pop_genes):
             folder = os.path.join(save_root, f"P{i+1}")
             if build_results[i]:
                 print(f"  評估初始模型 P{i+1}...")
                 eval_data = evaluate_fitness(folder, individual)
             else:
-                eval_data = (-999, 0, 0, []) # 給予失敗個體極差的適應度
-            
+                eval_data = (-999, 0, 0, [])  # 給予失敗個體極差的適應度
+
             parent_eval_data.append(eval_data)
-            log_row = create_log_row(individual, pop_sigmas[i], eval_data, 1, "parent", (-1, -1))
+            log_row = create_log_row(
+                individual, pop_sigmas[i], eval_data, 1, "parent", (-1, -1)
+            )
             initial_gen_log.append(log_row)
 
-        max_fitness_gen1 = max(d[0] for d in parent_eval_data) if parent_eval_data else -999
+        max_fitness_gen1 = (
+            max(d[0] for d in parent_eval_data) if parent_eval_data else -999
+        )
         gen1_filename = f"fitness_gen1_max{max_fitness_gen1:.2f}.csv"
         save_generation_log(initial_gen_log, os.path.join(log_dir, gen1_filename))
         print(f"★ 第 1 代的親代已評估完成，日誌已存為 {gen1_filename}")
-        
+
         start_gen = 1
-        
+
     else:
         print(f"🔁 從日誌檔 {os.path.basename(last_gen_filepath)} 恢復進度。")
         print(f"🔁 將從第 {start_gen + 1} 代繼續執行至第 {N_GENERATIONS} 代")
-        
+
         try:
             with open(last_gen_filepath, mode="r", newline="", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
-                last_gen_parents_rows = [row for row in reader if row.get("role") == "parent"]
+                last_gen_parents_rows = [
+                    row for row in reader if row.get("role") == "parent"
+                ]
         except (IOError, csv.Error) as e:
             send_error(f"讀取日誌檔失敗", f"檔案: {last_gen_filepath}\n錯誤: {e}")
             return
 
         if len(last_gen_parents_rows) < POP_SIZE:
-            send_error(f"親代紀錄不完整", f"檔案: {last_gen_filepath}\n預期 {POP_SIZE} 個, 實際 {len(last_gen_parents_rows)} 個。")
+            send_error(
+                f"親代紀錄不完整",
+                f"檔案: {last_gen_filepath}\n預期 {POP_SIZE} 個, 實際 {len(last_gen_parents_rows)} 個。",
+            )
             return
 
         pop_genes_list, pop_sigmas_list = [], []
@@ -272,16 +328,27 @@ def main():
             try:
                 gene = [float(row["S1"]), float(row["S2"]), float(row["A1"])]
                 pop_genes_list.append(gene)
-                sigma = [float(row["sigma1"]), float(row["sigma2"]), float(row["sigma3"])]
+                sigma = [
+                    float(row["sigma1"]),
+                    float(row["sigma2"]),
+                    float(row["sigma3"]),
+                ]
                 pop_sigmas_list.append(sigma)
                 fitness = float(row["fitness"])
                 efficiency = float(row["efficiency"])
                 process_score = float(row["process_score"])
-                angle_effs = [float(row.get(f"eff_{angle}", 0.0)) for angle in range(10, 90, 10)]
-                parent_eval_data.append((fitness, efficiency, process_score, angle_effs))
+                angle_effs = [
+                    float(row.get(f"eff_{angle}", 0.0)) for angle in range(10, 90, 10)
+                ]
+                parent_eval_data.append(
+                    (fitness, efficiency, process_score, angle_effs)
+                )
                 print(f"  [DEBUG] 已恢復親代 {i}: Gene={gene}, Fitness={fitness:.4f}")
             except (ValueError, KeyError) as e:
-                send_error("恢復親代數據失敗", f"檔案: {last_gen_filepath}\n錯誤行: {row}\n錯誤: {e}")
+                send_error(
+                    "恢復親代數據失敗",
+                    f"檔案: {last_gen_filepath}\n錯誤行: {row}\n錯誤: {e}",
+                )
                 return
         pop_genes = np.array(pop_genes_list, dtype=float)
         pop_sigmas = np.array(pop_sigmas_list, dtype=float)
@@ -296,10 +363,16 @@ def main():
         # 為了檢查重複，需要載入所有歷史紀錄
         full_history_log = []
         try:
-            log_files = [f for f in os.listdir(log_dir) if f.startswith('fitness_gen') and f.endswith('.csv')]
-            sorted_log_files = sorted(log_files, key=lambda x: int(re.search(r"gen(\d+)", x).group(1)))
+            log_files = [
+                f
+                for f in os.listdir(log_dir)
+                if f.startswith("fitness_gen") and f.endswith(".csv")
+            ]
+            sorted_log_files = sorted(
+                log_files, key=lambda x: int(re.search(r"gen(\d+)", x).group(1))
+            )
             for log_file in sorted_log_files:
-                with open(os.path.join(log_dir, log_file), 'r', encoding='utf-8') as f:
+                with open(os.path.join(log_dir, log_file), "r", encoding="utf-8") as f:
                     reader = csv.DictReader(f)
                     full_history_log.extend(list(reader))
         except Exception as e:
@@ -308,10 +381,16 @@ def main():
         children_genes, children_sigmas, children_parent_idxs = [], [], []
         for _ in range(OFFSPRING_SIZE):
             parent_idx = random.randint(0, POP_SIZE - 1)
-            parent_gene, parent_sigma = pop_genes[parent_idx].copy(), pop_sigmas[parent_idx].copy()
-            new_sigma = parent_sigma * np.exp(TAU_PRIME * np.random.randn() + TAU * np.random.randn(n))
+            parent_gene, parent_sigma = (
+                pop_genes[parent_idx].copy(),
+                pop_sigmas[parent_idx].copy(),
+            )
+            new_sigma = parent_sigma * np.exp(
+                TAU_PRIME * np.random.randn() + TAU * np.random.randn(n)
+            )
             new_sigma = np.maximum(new_sigma, 0.02)
-            if random.random() < 0.1: new_sigma = np.array([0.2, 0.2, 5.0])
+            if random.random() < 0.1:
+                new_sigma = np.array([0.2, 0.2, 5.0])
             child_gene = clamp_gene(parent_gene + new_sigma * np.random.randn(n))
             children_genes.append(child_gene)
             children_sigmas.append(new_sigma)
@@ -326,13 +405,22 @@ def main():
             if is_evaluated:
                 print(f"  子代 P{i+1} 已在紀錄中，直接使用分數: {eval_data[0]:.4f}")
                 offspring_eval_data[i] = eval_data
-                log_row = create_log_row(individual, children_sigmas[i], eval_data, current_gen, "offspring", children_parent_idxs[i])
+                log_row = create_log_row(
+                    individual,
+                    children_sigmas[i],
+                    eval_data,
+                    current_gen,
+                    "offspring",
+                    children_parent_idxs[i],
+                )
                 current_gen_log.append(log_row)
             else:
                 needs_processing_indices.append(i)
-        
+
         if needs_processing_indices:
-            print(f"\n--- 步驟 2/4：建立 {len(needs_processing_indices)} 個新子代模型 ---")
+            print(
+                f"\n--- 步驟 2/4：建立 {len(needs_processing_indices)} 個新子代模型 ---"
+            )
             for i in needs_processing_indices:
                 folder = os.path.join(save_root, f"P{i+1}")
                 os.makedirs(folder, exist_ok=True)
@@ -341,17 +429,21 @@ def main():
                 attempt = 0
                 while build_success == False:
                     try:
-                        result, log = Build_model(individual, mode="triangle", folder=folder)
+                        result, log = Build_model(
+                            individual, mode="triangle", folder=folder
+                        )
                         for msg in log:
                             print(msg)
                         if result == 1:
                             build_success = True
                             break
-                    except Exception as e :
+                    except Exception as e:
                         print(f"❌ Build_model 第 {attempt+1} 次失敗：{e}")
                     time.sleep(1)  # 等一秒再試（讓 AutoCAD 有時間反應）
 
-            print(f"\n--- 步驟 3/4：執行 {len(needs_processing_indices)} 次新子代模擬 ---")
+            print(
+                f"\n--- 步驟 3/4：執行 {len(needs_processing_indices)} 次新子代模擬 ---"
+            )
             for i in needs_processing_indices:
                 folder = os.path.join(save_root, f"P{i+1}")
                 print(f"  模擬子代模型 P{i+1}...")
@@ -359,28 +451,50 @@ def main():
                 while sim_success == False:
                     try:
                         tracepro_fast(os.path.join(folder, "Sim.scm"))
-                        fitness, efficiency, process_score, angle_effs = evaluate_fitness(folder, individual)
+                        fitness, efficiency, process_score, angle_effs = (
+                            evaluate_fitness(folder, individual)
+                        )
                         sim_success = True
                     except Exception as e:
 
-                        print(f"⚠️ tracepro/evaluate_fitness(parent {individual}) 失敗: {e}")
+                        print(
+                            f"⚠️ tracepro/evaluate_fitness(parent {individual}) 失敗: {e}"
+                        )
                         time.sleep(1)
 
-            print(f"\n--- 步驟 4/4：計算 {len(needs_processing_indices)} 個新子代適應度 ---")
+            print(
+                f"\n--- 步驟 4/4：計算 {len(needs_processing_indices)} 個新子代適應度 ---"
+            )
             for i in needs_processing_indices:
                 folder = os.path.join(save_root, f"P{i+1}")
                 print(f"  評估子代模型 P{i+1}...")
                 eval_data = evaluate_fitness(folder, children_genes[i])
                 offspring_eval_data[i] = eval_data
-                log_row = create_log_row(children_genes[i], children_sigmas[i], eval_data, current_gen, "offspring", children_parent_idxs[i])
+                log_row = create_log_row(
+                    children_genes[i],
+                    children_sigmas[i],
+                    eval_data,
+                    current_gen,
+                    "offspring",
+                    children_parent_idxs[i],
+                )
                 current_gen_log.append(log_row)
 
         if any(data is None for data in offspring_eval_data):
-            raise RuntimeError(f"嚴重錯誤：在第 {current_gen} 代，並非所有子代都成功獲得評估數據！")
+            raise RuntimeError(
+                f"嚴重錯誤：在第 {current_gen} 代，並非所有子代都成功獲得評估數據！"
+            )
 
         print("\n--- 選擇下一代 ---")
         for i in range(POP_SIZE):
-            log_row = create_log_row(pop_genes[i], pop_sigmas[i], parent_eval_data[i], current_gen, "parent_old", (-1, -1))
+            log_row = create_log_row(
+                pop_genes[i],
+                pop_sigmas[i],
+                parent_eval_data[i],
+                current_gen,
+                "parent_old",
+                (-1, -1),
+            )
             current_gen_log.append(log_row)
 
         combined_genes = np.vstack([pop_genes, children_genes])
@@ -394,7 +508,8 @@ def main():
         MAX_DUPLICATE = 2
         selected_indices = set()
         for idx in sorted_idx:
-            if len(new_parents) >= POP_SIZE: break
+            if len(new_parents) >= POP_SIZE:
+                break
             gene = combined_genes[idx]
             key = (round(gene[0], 2), round(gene[1], 2), int(gene[2]))
             count = count_dict.get(key, 0)
@@ -406,7 +521,8 @@ def main():
                 selected_indices.add(idx)
         if len(new_parents) < POP_SIZE:
             for idx in sorted_idx:
-                if len(new_parents) >= POP_SIZE: break
+                if len(new_parents) >= POP_SIZE:
+                    break
                 if idx not in selected_indices:
                     new_parents.append(combined_genes[idx])
                     new_sigmas.append(combined_sigmas[idx])
@@ -415,21 +531,31 @@ def main():
         pop_genes = np.array(new_parents, dtype=float)
         pop_sigmas = np.array(new_sigmas, dtype=float)
         parent_eval_data = new_eval_data
-        
+
         print("\n--- 紀錄新一代親代 ---")
         for i in range(len(pop_genes)):
-            log_row = create_log_row(pop_genes[i], pop_sigmas[i], parent_eval_data[i], current_gen, "parent", (-1, -1))
+            log_row = create_log_row(
+                pop_genes[i],
+                pop_sigmas[i],
+                parent_eval_data[i],
+                current_gen,
+                "parent",
+                (-1, -1),
+            )
             current_gen_log.append(log_row)
-            
+
         best_fitness_this_gen = max(combined_fitness)
         output_filename = f"fitness_gen{current_gen}_max{best_fitness_this_gen:.2f}.csv"
         save_generation_log(current_gen_log, os.path.join(log_dir, output_filename))
 
-        print(f"★ Generation {current_gen} 完成。本代最佳 Fitness: {best_fitness_this_gen:.4f}")
+        print(
+            f"★ Generation {current_gen} 完成。本代最佳 Fitness: {best_fitness_this_gen:.4f}"
+        )
         print(f"★ 日誌已存為: {output_filename}")
         gc.collect()
-        
+
     print("\n🎉 所有世代執行完成！")
+
 
 if __name__ == "__main__":
     try:
