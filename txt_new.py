@@ -93,20 +93,8 @@ def evaluate_fitness(
                         peak=0.5,
                         base=0.5,
                     )
-                elif theta >= 22 and theta < 90:
-                    # 超過 theta_d 之後給予負權重
-                    w = -0.01
-                elif theta < theta_d:
-                    # 角度處於 [0, theta_d] 範圍內時不扣分
-                    w = 0.5 * gaussian_weight(
-                        theta,
-                        center=0,
-                        sigma=sigma_up,
-                        theta_min=0,
-                        theta_max=theta_d,
-                        peak=0.5,
-                        base=0.5,
-                    )
+                else:
+                    w = 0
 
                 weighted_energy += flux * w
                 weight_debug_sum += w
