@@ -34,6 +34,8 @@
   (set-prism-material)
   (apply-source)
   (setup-candela)
+  ;; ensure deterministic ray tracing
+  (raytrace:set-random-seed 1)
 
   ;; simulation loop parameters
   (define ang_ini 10)
