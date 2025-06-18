@@ -8,13 +8,19 @@ warnings.filterwarnings("ignore", message=".*32-bit application should be automa
 
 
 # === Gaussian 權重函數 ===
-def gaussian_weight(theta, center, sigma, theta_min=None, theta_max=None, peak=1.0, base=0.0):
+def gaussian_weight(
+    theta, center, sigma, theta_min=None, theta_max=None, peak=1.0, base=0.0
+):
     if theta_min is not None and (theta < theta_min or theta > theta_max):
         return 0.0
     return base + peak * np.exp(-((theta - center) ** 2) / (2 * sigma**2))
 
-def down_gaussian_weight(theta, sigma, theta_min=None, theta_max=None, peak=1.0, base=0.0):
+
+def down_gaussian_weight(
+    theta, sigma, theta_min=None, theta_max=None, peak=1.0, base=0.0
+):
     return -np.exp(-((theta) ** 2) / (2 * sigma**2))
+
 
 # === Polar txt 讀取 ===
 def read_txt_file(file_path):
@@ -53,7 +59,9 @@ def compute_regression_score(S1, S2, A1):
 
 
 # === 加權導光效率計算 ===
-def evaluate_fitness(folder, individual, theta_u2=100, sigma_up=60, sigma_down=15, theta_d=22):
+def evaluate_fitness(
+    folder, individual, theta_u2=100, sigma_up=60, sigma_down=15, theta_d=22
+):
     S1, S2, A1 = individual
     weighted_efficiency_total = 0
     weight_sum = 0
@@ -65,7 +73,7 @@ def evaluate_fitness(folder, individual, theta_u2=100, sigma_up=60, sigma_down=1
         txt_path = os.path.join(folder, f"polar-{angle}.txt")
         try:
             angles, intensities = read_txt_file(txt_path)
-            if len(angles) == 0 :
+            if len(angles) == 0:
                 continue
 
             total_energy = np.sum(intensities)
@@ -102,19 +110,19 @@ def evaluate_fitness(folder, individual, theta_u2=100, sigma_up=60, sigma_down=1
 
                 weighted_energy += flux * w
                 weight_debug_sum += w
-                print(f"    θ = {theta:6.1f}°, flux = {flux:.4e}, weight = {w:.4f}")
+                # print(f"    θ = {theta:6.1f}°, flux = {flux:.4e}, weight = {w:.4f}")
 
             eff = float(weighted_energy / total_energy) if total_energy > 0 else 0.0
             efficiencies_per_angle.append(eff)
             weighted_efficiency_total += eff * weights[idx]
             weight_sum += weights[idx]
 
-            print(
-                f"Angle {angle}° - Eff: {eff:.4f}, "
-                f"Total Energy: {total_energy:.4e}, "
-                f"Weighted Energy: {weighted_energy:.4e}, "
-                f"Weight Sum: {weight_debug_sum:.2f}"
-            )
+            # print(
+            #     f"Angle {angle}° - Eff: {eff:.4f}, "
+            #     f"Total Energy: {total_energy:.4e}, "
+            #     f"Weighted Energy: {weighted_energy:.4e}, "
+            #     f"Weight Sum: {weight_debug_sum:.2f}"
+            # )
 
         except Exception as e:
             print(f"無法處理 {txt_path}: {e}")

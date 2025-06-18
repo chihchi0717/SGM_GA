@@ -21,12 +21,12 @@ import smtplib
 from email.message import EmailMessage
 
 # === ES 參數設定 ===
-POP_SIZE = 5  # μ (親代數量)
-OFFSPRING_SIZE = POP_SIZE * 7  # λ (後代數量)
+POP_SIZE = 3  # μ (親代數量)
+OFFSPRING_SIZE = POP_SIZE  # λ (後代數量)
 N_GENERATIONS = 100  # 總共要執行的世代數
 
 # 基因範圍
-SIDE_BOUND = [0.4, 1.0]
+SIDE_BOUND = [0.4, 1.5]
 ANGLE_BOUND = [1, 179]
 
 # ES 自適應突變學習率 (n=3)
@@ -46,6 +46,30 @@ save_root = os.path.join(BASE_DIR, "GA_population")
 log_dir = r"C:\Users\cchih\OneDrive - NTHU\msi"
 os.makedirs(save_root, exist_ok=True)
 os.makedirs(log_dir, exist_ok=True)
+
+
+def write_run_config():
+    """將執行設定輸出至 log_dir/run_config.txt"""
+    config = {
+        "POP_SIZE": POP_SIZE,
+        "OFFSPRING_SIZE": OFFSPRING_SIZE,
+        "N_GENERATIONS": N_GENERATIONS,
+        "SIDE_BOUND": SIDE_BOUND,
+        "ANGLE_BOUND": ANGLE_BOUND,
+        "TAU_PRIME": TAU_PRIME,
+        "TAU": TAU,
+        "GLOBAL_SEED": GLOBAL_SEED,
+        "save_root": save_root,
+        "log_dir": log_dir,
+    }
+    try:
+        cfg_path = os.path.join(log_dir, "run_config.txt")
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            for k, v in config.items():
+                f.write(f"{k} = {v}\n")
+        print(f"🔧 執行設定已輸出到 {cfg_path}")
+    except Exception as e:
+        print(f"⚠️  無法寫入 run_config.txt: {e}")
 
 
 # === 錯誤紀錄函式 (使用您的函式名) ===
@@ -184,6 +208,34 @@ def check_if_evaluated(fitness_log, individual):
     return False, None
 
 
+def build_model_with_retry(individual, folder, mode="triangle", max_attempts=3):
+    """Build a model with retries to handle transient AutoCAD errors."""
+    attempt = 0
+    while attempt < max_attempts:
+        try:
+            result, log = Build_model(individual, mode=mode, folder=folder)
+            for msg in log:
+                print(msg)
+            if result == 1:
+                return True
+        except Exception as e:
+            print(f"❌ Build_model 第 {attempt+1} 次失敗：{e}")
+            time.sleep(1)
+        attempt += 1
+    return False
+
+
+def simulate_and_evaluate(folder, individual):
+    """Run TracePro simulation and evaluate fitness."""
+    while True:
+        try:
+            tracepro_fast(os.path.join(folder, "Sim.scm"))
+            return evaluate_fitness(folder, individual)
+        except Exception as e:
+            print(f"⚠️ tracepro/evaluate_fitness(parent {individual}) 失敗: {e}")
+            time.sleep(1)
+
+
 # === 初始化 SCM 複製 ===
 def copy_scm_to_all_folders():
     macro_dir = os.path.join(BASE_DIR, "Macro")
@@ -205,6 +257,7 @@ def copy_scm_to_all_folders():
 def main():
     copy_scm_to_all_folders()
     """主執行函式"""
+    write_run_config()
     start_gen, last_gen_filepath = find_last_completed_generation(log_dir)
 
     pop_genes = None
@@ -235,25 +288,10 @@ def main():
             folder = os.path.join(save_root, f"P{i+1}")
             os.makedirs(folder, exist_ok=True)
             print(f"  建立初始模型 P{i+1}...")
-
-            build_success = False
-            attempt = 0
-            while not build_success and attempt < 3:
-                try:
-                    result, log = Build_model(
-                        individual, mode="triangle", folder=folder
-                    )
-                    for msg in log:
-                        print(msg)
-                    if result == 1:
-                        build_success = True
-                except Exception as e:
-                    print(f"❌ Build_model 第 {attempt+1} 次失敗：{e}")
-                    attempt += 1
-                    time.sleep(1)
-
-            build_results[i] = build_success
-            if not build_success:
+            build_results[i] = build_model_with_retry(
+                individual, folder, mode="triangle"
+            )
+            if not build_results[i]:
                 print(f"❌ 建立模型 P{i+1} 最終失敗。")
 
         print("\n--- 步驟 2/3: 批次模擬初始族群模型 ---")
@@ -261,19 +299,7 @@ def main():
             if success:
                 folder = os.path.join(save_root, f"P{i+1}")
                 print(f"  模擬初始模型 P{i+1}...")
-                sim_success = False
-                while sim_success == False:
-                    try:
-                        tracepro_fast(os.path.join(folder, "Sim.scm"))
-                        fitness, efficiency, process_score, angle_effs = (
-                            evaluate_fitness(folder, individual)
-                        )
-                        sim_success = True
-                    except Exception as e:
-                        print(
-                            f"⚠️ tracepro/evaluate_fitness(parent {individual}) 失敗: {e}"
-                        )
-                        time.sleep(1)
+                simulate_and_evaluate(folder, pop_genes[i])
 
         print("\n--- 步驟 3/3: 批次評估初始族群適應度 ---")
         initial_gen_log = []
@@ -425,21 +451,7 @@ def main():
                 folder = os.path.join(save_root, f"P{i+1}")
                 os.makedirs(folder, exist_ok=True)
                 print(f"  建立子代模型 P{i+1}...")
-                build_success = False
-                attempt = 0
-                while build_success == False:
-                    try:
-                        result, log = Build_model(
-                            individual, mode="triangle", folder=folder
-                        )
-                        for msg in log:
-                            print(msg)
-                        if result == 1:
-                            build_success = True
-                            break
-                    except Exception as e:
-                        print(f"❌ Build_model 第 {attempt+1} 次失敗：{e}")
-                    time.sleep(1)  # 等一秒再試（讓 AutoCAD 有時間反應）
+                build_model_with_retry(children_genes[i], folder, mode="triangle")
 
             print(
                 f"\n--- 步驟 3/4：執行 {len(needs_processing_indices)} 次新子代模擬 ---"
@@ -447,20 +459,7 @@ def main():
             for i in needs_processing_indices:
                 folder = os.path.join(save_root, f"P{i+1}")
                 print(f"  模擬子代模型 P{i+1}...")
-                sim_success = False
-                while sim_success == False:
-                    try:
-                        tracepro_fast(os.path.join(folder, "Sim.scm"))
-                        fitness, efficiency, process_score, angle_effs = (
-                            evaluate_fitness(folder, individual)
-                        )
-                        sim_success = True
-                    except Exception as e:
-
-                        print(
-                            f"⚠️ tracepro/evaluate_fitness(parent {individual}) 失敗: {e}"
-                        )
-                        time.sleep(1)
+                simulate_and_evaluate(folder, children_genes[i])
 
             print(
                 f"\n--- 步驟 4/4：計算 {len(needs_processing_indices)} 個新子代適應度 ---"
