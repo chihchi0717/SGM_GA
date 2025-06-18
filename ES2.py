@@ -219,13 +219,13 @@ def main():
                 folder = os.path.join(save_root, f"P{i+1}")
                 print(f"  模擬初始模型 P{i+1}...")
                 sim_success = False
-                while sim_success == False:
+                while not sim_success:
                     try:
                         tracepro_fast(os.path.join(folder, "Sim.scm"))
-                        fitness, efficiency, process_score, angle_effs = evaluate_fitness(folder, individual)
+                        fitness, efficiency, process_score, angle_effs = evaluate_fitness(folder, pop_genes[i])
                         sim_success = True
                     except Exception as e:
-                        print(f"⚠️ tracepro/evaluate_fitness(parent {individual}) 失敗: {e}")
+                        print(f"⚠️ tracepro/evaluate_fitness(parent {pop_genes[i]}) 失敗: {e}")
                         time.sleep(1)
 
         print("\n--- 步驟 3/3: 批次評估初始族群適應度 ---")
@@ -339,15 +339,15 @@ def main():
                 print(f"  建立子代模型 P{i+1}...")
                 build_success = False
                 attempt = 0
-                while build_success == False:
+                while not build_success:
                     try:
-                        result, log = Build_model(individual, mode="triangle", folder=folder)
+                        result, log = Build_model(children_genes[i], mode="triangle", folder=folder)
                         for msg in log:
                             print(msg)
                         if result == 1:
                             build_success = True
                             break
-                    except Exception as e :
+                    except Exception as e:
                         print(f"❌ Build_model 第 {attempt+1} 次失敗：{e}")
                     time.sleep(1)  # 等一秒再試（讓 AutoCAD 有時間反應）
 
@@ -356,14 +356,14 @@ def main():
                 folder = os.path.join(save_root, f"P{i+1}")
                 print(f"  模擬子代模型 P{i+1}...")
                 sim_success = False
-                while sim_success == False:
+                while not sim_success:
                     try:
                         tracepro_fast(os.path.join(folder, "Sim.scm"))
-                        fitness, efficiency, process_score, angle_effs = evaluate_fitness(folder, individual)
+                        fitness, efficiency, process_score, angle_effs = evaluate_fitness(folder, children_genes[i])
                         sim_success = True
                     except Exception as e:
 
-                        print(f"⚠️ tracepro/evaluate_fitness(parent {individual}) 失敗: {e}")
+                        print(f"⚠️ tracepro/evaluate_fitness(parent {children_genes[i]}) 失敗: {e}")
                         time.sleep(1)
 
             print(f"\n--- 步驟 4/4：計算 {len(needs_processing_indices)} 個新子代適應度 ---")
