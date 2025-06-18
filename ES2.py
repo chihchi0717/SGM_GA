@@ -47,6 +47,30 @@ os.makedirs(save_root, exist_ok=True)
 os.makedirs(log_dir, exist_ok=True)
 
 
+def write_run_config():
+    """將執行設定輸出至 log_dir/run_config.txt"""
+    config = {
+        "POP_SIZE": POP_SIZE,
+        "OFFSPRING_SIZE": OFFSPRING_SIZE,
+        "N_GENERATIONS": N_GENERATIONS,
+        "SIDE_BOUND": SIDE_BOUND,
+        "ANGLE_BOUND": ANGLE_BOUND,
+        "TAU_PRIME": TAU_PRIME,
+        "TAU": TAU,
+        "GLOBAL_SEED": GLOBAL_SEED,
+        "save_root": save_root,
+        "log_dir": log_dir,
+    }
+    try:
+        cfg_path = os.path.join(log_dir, "run_config.txt")
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            for k, v in config.items():
+                f.write(f"{k} = {v}\n")
+        print(f"🔧 執行設定已輸出到 {cfg_path}")
+    except Exception as e:
+        print(f"⚠️  無法寫入 run_config.txt: {e}")
+
+
 # === 錯誤紀錄函式 (使用您的函式名) ===
 def send_error(subject: str, body: str):
     """將錯誤訊息寫入本地檔案"""
@@ -167,6 +191,7 @@ def copy_scm_to_all_folders():
 def main():
     copy_scm_to_all_folders()
     """主執行函式"""
+    write_run_config()
     start_gen, last_gen_filepath = find_last_completed_generation(log_dir)
 
     pop_genes = None
