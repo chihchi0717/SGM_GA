@@ -105,12 +105,12 @@ def evaluate_fitness(
             weighted_efficiency_total += eff * weights[idx]
             weight_sum += weights[idx]
 
-            # print(
-            #     f"Angle {angle}° - Eff: {eff:.4f}, "
-            #     f"Total Energy: {total_energy:.4e}, "
-            #     f"Weighted Energy: {weighted_energy:.4e}, "
-            #     f"Weight Sum: {weight_debug_sum:.2f}"
-            # )
+            print(
+                f"Angle {angle}° - Eff: {eff:.4f}, "
+                f"Total Energy: {total_energy:.4e}, "
+                f"Weighted Energy: {weighted_energy:.4e}, "
+                f"Weight Sum: {weight_debug_sum:.2f}"
+            )
 
         except Exception as e:
             print(f"無法處理 {txt_path}: {e}")
