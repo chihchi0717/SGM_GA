@@ -84,15 +84,16 @@ def evaluate_fitness(
                 # 預設權重為 0，避免意外錯誤導致 w 未定義
                 if theta > 90:
                     # 向上光線，θ > 90°
-                    w = gaussian_weight(
-                        theta,
-                        center=theta_u2,
-                        sigma=sigma_up,
-                        theta_min=90,
-                        theta_max=180,
-                        peak=0.5,
-                        base=0.5,
-                    )
+                    # w = gaussian_weight(
+                    #     theta,
+                    #     center=theta_u2,
+                    #     sigma=sigma_up,
+                    #     theta_min=90,
+                    #     theta_max=180,
+                    #     peak=0.5,
+                    #     base=0.5,
+                    # )
+                    w = 1
                 else:
                     w = 0
 
@@ -105,12 +106,12 @@ def evaluate_fitness(
             weighted_efficiency_total += eff * weights[idx]
             weight_sum += weights[idx]
 
-            print(
-                f"Angle {angle}° - Eff: {eff:.4f}, "
-                f"Total Energy: {total_energy:.4e}, "
-                f"Weighted Energy: {weighted_energy:.4e}, "
-                f"Weight Sum: {weight_debug_sum:.2f}"
-            )
+            # print(
+            #     f"Angle {angle}° - Eff: {eff:.4f}, "
+            #     f"Total Energy: {total_energy:.4e}, "
+            #     f"Weighted Energy: {weighted_energy:.4e}, "
+            #     f"Weight Sum: {weight_debug_sum:.2f}"
+            # )
 
         except Exception as e:
             print(f"無法處理 {txt_path}: {e}")
@@ -125,7 +126,17 @@ def evaluate_fitness(
         print(f"⚠️ 製程品質評估失敗: {e}")
         process_score = 1.0
 
-    fitness = efficiency * (1 / (1 + process_score))
+    # fitness = efficiency * (1 / (1 + process_score))
+    # return fitness, efficiency, process_score, efficiencies_per_angle
+    up_eff_array = np.array(efficiencies_per_angle)
+    mean_up_eff = np.mean(up_eff_array)
+    std_up_eff = np.std(up_eff_array)
+    cv_up = std_up_eff / mean_up_eff if mean_up_eff > 0 else 0
+
+    alpha = 2.0  # 加權係數，可調整均勻度的懲罰強度
+    fitness = (efficiency / (1 + process_score)) * (1 / (1 + alpha * cv_up))
+
+    print(f"CV (θ > 90°): {cv_up:.4f}")
     return fitness, efficiency, process_score, efficiencies_per_angle
 
 
