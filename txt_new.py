@@ -75,6 +75,7 @@ def evaluate_fitness(
 
     weights = [1, 2, 5, 7, 5, 8.5, 1.5, 2]
     cvs_per_angle = []
+    cvs_for_avg = []
 
     for idx, angle in enumerate(range(10, 90, 10)):
         txt_path = os.path.join(folder, f"polar-{angle}.txt")
@@ -116,9 +117,10 @@ def evaluate_fitness(
             if intensities_up:
                 mean_up = np.mean(intensities_up)
                 std_up = np.std(intensities_up)
-                cv_up_angle = std_up / mean_up if mean_up > 0 else 0.0
+                cv_up_angle = std_up / mean_up if mean_up > 0 else 1.0
+                cvs_for_avg.append(cv_up_angle)
             else:
-                cv_up_angle = 0.0
+                cv_up_angle = 1.0
             cvs_per_angle.append(cv_up_angle)
             weighted_efficiency_total += eff * weights[idx]
             weight_sum += weights[idx]
@@ -145,10 +147,10 @@ def evaluate_fitness(
 
     # fitness = efficiency * (1 / (1 + process_score))
     # return fitness, efficiency, process_score, efficiencies_per_angle
-    if cvs_per_angle:
-        cv_up = float(np.mean(cvs_per_angle))
+    if cvs_for_avg:
+        cv_up = float(np.mean(cvs_for_avg))
     else:
-        cv_up = 0.0
+        cv_up = 1.0
 
     alpha = 2.0  # 加權係數，可調整均勻度的懲罰強度
     fitness = (efficiency / (1 + process_score)) * (1 / (1 + alpha * cv_up))
