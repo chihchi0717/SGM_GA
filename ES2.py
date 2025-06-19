@@ -21,7 +21,7 @@ import smtplib
 from email.message import EmailMessage
 
 # === ES 參數設定 ===
-POP_SIZE = 3  # μ (親代數量)
+POP_SIZE = 10  # μ (親代數量)
 OFFSPRING_SIZE = POP_SIZE  # λ (後代數量)
 N_GENERATIONS = 100  # 總共要執行的世代數
 
@@ -120,8 +120,10 @@ def save_generation_log(generation_data, file_path):
             "fitness",
             "efficiency",
             "process_score",
+            "uniformity",
         ]
         + [f"eff_{angle}" for angle in range(10, 90, 10)]
+        + [f"uni_{angle}" for angle in range(10, 90, 10)]
         + ["random_seed"]
     )
 
@@ -138,7 +140,9 @@ def create_log_row(
     individual, sigma, fitness_data, generation, role, parent_indices, seed=None
 ):
     """建立一筆日誌紀錄的字典物件"""
-    fitness, efficiency, process_score, angle_effs = fitness_data
+    fitness, efficiency, process_score, uniformity, angle_effs, angle_unis = (
+        fitness_data
+    )
     p_idx1, p_idx2 = parent_indices
     row = {
         "generation": generation,
@@ -154,11 +158,15 @@ def create_log_row(
         "fitness": f"{fitness:.6f}",
         "efficiency": f"{efficiency:.6f}",
         "process_score": f"{process_score:.6f}",
+        "uniformity": f"{uniformity:.6f}",
         "random_seed": seed if seed is not None else GLOBAL_SEED,
     }
     if angle_effs:
         for angle, eff in zip(range(10, 90, 10), angle_effs):
             row[f"eff_{angle}"] = f"{eff:.6f}"
+    if angle_unis:
+        for angle, uni_a in zip(range(10, 90, 10), angle_unis):
+            row[f"uni_{angle}"] = f"{uni_a:.6f}"
     return row
 
 
@@ -199,10 +207,26 @@ def check_if_evaluated(fitness_log, individual):
                 fitness = float(row["fitness"])
                 efficiency = float(row["efficiency"])
                 process_score = float(row["process_score"])
+                cv = float(row.get("cv", 0.0))
+                uniformity = float(row.get("uniformity", 1.0 - cv))
                 angle_effs = [
                     float(row.get(f"eff_{angle}", 0.0)) for angle in range(10, 90, 10)
                 ]
-                return True, (fitness, efficiency, process_score, angle_effs)
+                angle_unis = []
+                for angle in range(10, 90, 10):
+                    if f"uni_{angle}" in row:
+                        angle_unis.append(float(row.get(f"uni_{angle}", 0.0)))
+                    else:
+                        cv_a = float(row.get(f"cv_{angle}", 1.0))
+                        angle_unis.append(max(0.0, 1.0 - cv_a))
+                return True, (
+                    fitness,
+                    efficiency,
+                    process_score,
+                    uniformity,
+                    angle_effs,
+                    angle_unis,
+                )
             except (ValueError, KeyError):
                 continue
     return False, None
@@ -230,7 +254,7 @@ def simulate_and_evaluate(folder, individual):
     while True:
         try:
             tracepro_fast(os.path.join(folder, "Sim.scm"))
-            return evaluate_fitness(folder, individual)
+            return evaluate_fitness(folder, individual, return_uniformity=True)
         except Exception as e:
             print(f"⚠️ tracepro/evaluate_fitness(parent {individual}) 失敗: {e}")
             time.sleep(1)
@@ -308,9 +332,9 @@ def main():
             folder = os.path.join(save_root, f"P{i+1}")
             if build_results[i]:
                 print(f"  評估初始模型 P{i+1}...")
-                eval_data = evaluate_fitness(folder, individual)
+                eval_data = evaluate_fitness(folder, individual, return_uniformity=True)
             else:
-                eval_data = (-999, 0, 0, [])  # 給予失敗個體極差的適應度
+                eval_data = (-999, 0, 0, 0.0, [], [0.0] * 8)  # 給予失敗個體極差的適應度
 
             parent_eval_data.append(eval_data)
             log_row = create_log_row(
@@ -363,11 +387,27 @@ def main():
                 fitness = float(row["fitness"])
                 efficiency = float(row["efficiency"])
                 process_score = float(row["process_score"])
+                cv = float(row.get("cv", 0.0))
+                uniformity = float(row.get("uniformity", 1.0 - cv))
                 angle_effs = [
                     float(row.get(f"eff_{angle}", 0.0)) for angle in range(10, 90, 10)
                 ]
+                angle_unis = []
+                for angle in range(10, 90, 10):
+                    if f"uni_{angle}" in row:
+                        angle_unis.append(float(row.get(f"uni_{angle}", 0.0)))
+                    else:
+                        cv_a = float(row.get(f"cv_{angle}", 1.0))
+                        angle_unis.append(max(0.0, 1.0 - cv_a))
                 parent_eval_data.append(
-                    (fitness, efficiency, process_score, angle_effs)
+                    (
+                        fitness,
+                        efficiency,
+                        process_score,
+                        uniformity,
+                        angle_effs,
+                        angle_unis,
+                    )
                 )
                 print(f"  [DEBUG] 已恢復親代 {i}: Gene={gene}, Fitness={fitness:.4f}")
             except (ValueError, KeyError) as e:
@@ -467,7 +507,9 @@ def main():
             for i in needs_processing_indices:
                 folder = os.path.join(save_root, f"P{i+1}")
                 print(f"  評估子代模型 P{i+1}...")
-                eval_data = evaluate_fitness(folder, children_genes[i])
+                eval_data = evaluate_fitness(
+                    folder, children_genes[i], return_uniformity=True
+                )
                 offspring_eval_data[i] = eval_data
                 log_row = create_log_row(
                     children_genes[i],
