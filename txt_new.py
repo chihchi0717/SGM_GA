@@ -117,10 +117,10 @@ def evaluate_fitness(
                 mean_up = np.mean(intensities_up)
                 std_up = np.std(intensities_up)
                 if mean_up == 0:
-                    cv_up_angle = np.nan
+                    uniformity_angle = 0.0
                 else:
                     cv_up_angle = std_up / mean_up
-                uniformity_angle = 1 / (1 + cv_up_angle)
+                    uniformity_angle = 1 / (1 + cv_up_angle)
                 if not np.isfinite(uniformity_angle):
                     uniformity_angle = 0.0
             else:
@@ -181,7 +181,7 @@ def evaluate_fitness(
     uni_norm = np.clip(uni_norm, 0, 1)
 
     # === Step 5: 最終目標函數 ===
-    fitness = eff_norm + proc_norm + uni_norm
+    fitness = (eff_norm + proc_norm + uni_norm) / 3
 
     # === Step 6: 顯示 log（可選） ===
     print(
