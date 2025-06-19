@@ -8,7 +8,7 @@
     v))
 
 (define (set-prism-material)
-  (property:apply-material (entity 2) "New" "index1.2536" (gvector 0 0 0)))
+  (property:apply-material (entity 2) "New" "index1.3" (gvector 0 0 0)))
 
 (define (apply-source)
   (edit:add-selection (tools:face-in-body 3 (entity 1)))
@@ -52,11 +52,16 @@
     (entity:rotate (entity 1) center_x center_y center_z 0 0 1 angle)
     (raytrace:source)
     (let ((bmp_path (string-append output_path "view-" angstr ".bmp"))
-          (txt_path (string-append output_path "polar-" angstr ".txt")))
+          (txt_path (string-append output_path "polar-" angstr ".txt"))
+          (rect_bmp (string-append output_path "RCD-" angstr ".bmp")))
       (file:save-as bmp_path)
+      (analysis:candela-save-bmp "rectangular-distribution" rect_bmp)
       (analysis:candela-save-txt "polar-distribution" txt_path 361)))
 
   ;; create completion marker
+
+  
+  (file:save-as "completion_signal.OML")
   (file:save-as "../../Macro/completion_signal.OML"))
 
 (simulate)
