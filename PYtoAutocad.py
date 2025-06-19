@@ -229,16 +229,17 @@ class PrismBuilder:
         actual_array_top = top + (rows - 1) * (top - bottom)
         array_center_y = (actual_array_top + bottom) / 2
         center_y = round(array_center_y * self.scale, 1)
-        center_x = round(Cx * self.scale + 1, 1)
+        center_x = 0  # round(Cx * self.scale + 1, 1)
         with open(paths.center_y_path, "w") as f:
             f.write(str(center_y))
         with open(paths.center_x_path, "w") as f:
             f.write(str(center_x))
 
-        start_point = APoint(100, array_center_y * self.scale, 0)
+        # 20250619
+        start_point = APoint(19, array_center_y * self.scale, 0)
         send_command_with_retry(
             self.acad,
-            f"_BOX\n{start_point.x},{start_point.y},{start_point.z}\n{start_point.x + light_source_length + 0.6},{start_point.y + light_source_length + 0.6},{start_point.z + light_source_length}\n",
+            f"_BOX\n{start_point.x},{start_point.y},{start_point.z}\n{start_point.x + light_source_length},{start_point.y + light_source_length},{start_point.z + light_source_length}\n",
         )
 
         send_command_with_retry(self.acad, f"save\n{paths.dwg_path}\ny\n")
