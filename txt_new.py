@@ -60,7 +60,13 @@ def compute_regression_score(S1, S2, A1):
 
 # === 加權導光效率計算 ===
 def evaluate_fitness(
-    folder, individual, theta_u2=100, sigma_up=60, sigma_down=15, theta_d=22
+    folder,
+    individual,
+    theta_u2=100,
+    sigma_up=60,
+    sigma_down=15,
+    theta_d=22,
+    return_uniformity=False,
 ):
     S1, S2, A1 = individual
     weighted_efficiency_total = 0
@@ -68,6 +74,7 @@ def evaluate_fitness(
     efficiencies_per_angle = []
 
     weights = [1, 2, 5, 7, 5, 8.5, 1.5, 2]
+    uniformities_per_angle = []
 
     for idx, angle in enumerate(range(10, 90, 10)):
         txt_path = os.path.join(folder, f"polar-{angle}.txt")
@@ -80,6 +87,7 @@ def evaluate_fitness(
             weighted_energy = 0
             weight_debug_sum = 0  # 為了印出此角度的權重總和
 
+            intensities_up = []
             for theta, flux in zip(angles, intensities):
                 # 預設權重為 0，避免意外錯誤導致 w 未定義
                 if theta > 90:
@@ -99,10 +107,22 @@ def evaluate_fitness(
 
                 weighted_energy += flux * w
                 weight_debug_sum += w
+                if theta > 90:
+                    intensities_up.append(flux)
                 # print(f"    θ = {theta:6.1f}°, flux = {flux:.4e}, weight = {w:.4f}")
 
             eff = float(weighted_energy / total_energy) if total_energy > 0 else 0.0
             efficiencies_per_angle.append(eff)
+            if intensities_up:
+                mean_up = np.mean(intensities_up)
+                std_up = np.std(intensities_up)
+                cv_up_angle = std_up / mean_up if mean_up > 0 else 1.0
+            else:
+                cv_up_angle = 1.0
+            uniformity_angle = 1.0 - cv_up_angle
+            if uniformity_angle < 0:
+                uniformity_angle = 0.0
+            uniformities_per_angle.append(uniformity_angle)
             weighted_efficiency_total += eff * weights[idx]
             weight_sum += weights[idx]
 
@@ -116,6 +136,7 @@ def evaluate_fitness(
         except Exception as e:
             print(f"無法處理 {txt_path}: {e}")
             efficiencies_per_angle.append(0.0)
+            uniformities_per_angle.append(0.0)
             continue
 
     efficiency = weighted_efficiency_total / weight_sum if weight_sum > 0 else 0
@@ -128,16 +149,28 @@ def evaluate_fitness(
 
     # fitness = efficiency * (1 / (1 + process_score))
     # return fitness, efficiency, process_score, efficiencies_per_angle
-    up_eff_array = np.array(efficiencies_per_angle)
-    mean_up_eff = np.mean(up_eff_array)
-    std_up_eff = np.std(up_eff_array)
-    cv_up = std_up_eff / mean_up_eff if mean_up_eff > 0 else 0
+    if uniformities_per_angle:
+        uniformity = float(np.mean(uniformities_per_angle))
+    else:
+        uniformity = 0.0
 
     alpha = 2.0  # 加權係數，可調整均勻度的懲罰強度
-    fitness = (efficiency / (1 + process_score)) * (1 / (1 + alpha * cv_up))
+    # 將均勻度定義為 1 - CV
+    fitness = (efficiency / (1 + process_score)) * uniformity
 
-    print(f"CV (θ > 90°): {cv_up:.4f}")
-    return fitness, efficiency, process_score, efficiencies_per_angle
+    print(f"Uniformity: {uniformity:.4f}")
+
+    if return_uniformity:
+        return (
+            fitness,
+            efficiency,
+            process_score,
+            uniformity,
+            efficiencies_per_angle,
+            uniformities_per_angle,
+        )
+    else:
+        return fitness, efficiency, process_score, efficiencies_per_angle
 
 
 # fitness, efficiency, process_score, efficiencies_per_angle = evaluate_fitness(
