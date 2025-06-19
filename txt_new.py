@@ -145,10 +145,10 @@ def evaluate_fitness(
 
     # fitness = efficiency * (1 / (1 + process_score))
     # return fitness, efficiency, process_score, efficiencies_per_angle
-    up_eff_array = np.array(efficiencies_per_angle)
-    mean_up_eff = np.mean(up_eff_array)
-    std_up_eff = np.std(up_eff_array)
-    cv_up = std_up_eff / mean_up_eff if mean_up_eff > 0 else 0
+    if cvs_per_angle:
+        cv_up = float(np.mean(cvs_per_angle))
+    else:
+        cv_up = 0.0
 
     alpha = 2.0  # 加權係數，可調整均勻度的懲罰強度
     fitness = (efficiency / (1 + process_score)) * (1 / (1 + alpha * cv_up))
