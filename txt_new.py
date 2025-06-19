@@ -181,7 +181,7 @@ def evaluate_fitness(
     uni_norm = np.clip(uni_norm, 0, 1)
 
     # === Step 5: 最終目標函數 ===
-    fitness = eff_norm + proc_norm + uni_norm
+    fitness = (eff_norm + proc_norm + uni_norm) / 3
 
     # === Step 6: 顯示 log（可選） ===
     print(
