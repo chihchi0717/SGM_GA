@@ -145,7 +145,7 @@ def evaluate_fitness(
     print(f"CV (θ > 90°): {cv_up:.4f}")
 
     if return_cv:
-        return fitness, efficiency, process_score, efficiencies_per_angle, cv_up
+        return fitness, efficiency, process_score, cv_up, efficiencies_per_angle
     else:
         return fitness, efficiency, process_score, efficiencies_per_angle
 
