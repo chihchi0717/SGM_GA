@@ -19,11 +19,11 @@
   (analysis:candela-up (gvector -1 0 0))
   (analysis:candela-ray-type "missed")
   (analysis:candela-symmetry "none")
-  (analysis:candela-distribution 1 #f 540 #t #f)
+  (analysis:candela-distribution 1 #t 90 #t #f)
   (analysis:candela-distribution-luminaire 180)
   (analysis:candela-distribution-max #f 0)
   (analysis:candela-distribution-min #f 0)
-  (analysis:candela-distribution-log-plot #t)
+  (analysis:candela-distribution-log-plot #f)
   (analysis:candela-rect-distribution-angular-width 180)
   (raytrace:set-radiometric-units-radiometric))
 
@@ -56,7 +56,7 @@
           (rect_bmp (string-append output_path "RCD-" angstr ".bmp")))
       (file:save-as bmp_path)
       (analysis:candela-save-bmp "rectangular-distribution" rect_bmp)
-      (analysis:candela-save-txt "polar-distribution" txt_path 361)))
+      (analysis:candela-save-txt "polar-distribution" txt_path 61)))
 
   ;; create completion marker
 
