@@ -75,7 +75,6 @@ def evaluate_fitness(
 
     weights = [1, 2, 5, 7, 5, 8.5, 1.5, 2]
     cvs_per_angle = []
-    cvs_for_avg = []
 
     for idx, angle in enumerate(range(10, 90, 10)):
         txt_path = os.path.join(folder, f"polar-{angle}.txt")
@@ -118,7 +117,6 @@ def evaluate_fitness(
                 mean_up = np.mean(intensities_up)
                 std_up = np.std(intensities_up)
                 cv_up_angle = std_up / mean_up if mean_up > 0 else 1.0
-                cvs_for_avg.append(cv_up_angle)
             else:
                 cv_up_angle = 1.0
             cvs_per_angle.append(cv_up_angle)
@@ -148,15 +146,21 @@ def evaluate_fitness(
 
     # fitness = efficiency * (1 / (1 + process_score))
     # return fitness, efficiency, process_score, efficiencies_per_angle
-    if cvs_for_avg:
-        cv_up = float(np.mean(cvs_for_avg))
+    if cvs_per_angle:
+        cv_up = float(np.mean(cvs_per_angle))
     else:
         cv_up = 1.0
 
-    alpha = 2.0  # 加權係數，可調整均勻度的懲罰強度
-    fitness = (efficiency / (1 + process_score)) * (1 / (1 + alpha * cv_up))
+    uniformity = 1.0 - cv_up
+    if uniformity < 0:
+        uniformity = 0.0
 
-    print(f"CV (θ > 90°): {cv_up:.4f}")
+    alpha = 2.0  # 加權係數，可調整均勻度的懲罰強度
+    # 將均勻度定義為 1 - CV
+    uniformity_weight = uniformity
+    fitness = (efficiency / (1 + process_score)) * uniformity_weight
+
+    print(f"CV (θ > 90°): {cv_up:.4f}, Uniformity: {uniformity:.4f}")
 
     if return_cv:
         return (
@@ -164,6 +168,7 @@ def evaluate_fitness(
             efficiency,
             process_score,
             cv_up,
+            uniformity,
             efficiencies_per_angle,
             cvs_per_angle,
         )

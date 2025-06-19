@@ -121,6 +121,7 @@ def save_generation_log(generation_data, file_path):
             "efficiency",
             "process_score",
             "cv",
+            "uniformity",
         ]
         + [f"eff_{angle}" for angle in range(10, 90, 10)]
         + [f"cv_{angle}" for angle in range(10, 90, 10)]
@@ -140,7 +141,7 @@ def create_log_row(
     individual, sigma, fitness_data, generation, role, parent_indices, seed=None
 ):
     """建立一筆日誌紀錄的字典物件"""
-    fitness, efficiency, process_score, cv, angle_effs, angle_cvs = fitness_data
+    fitness, efficiency, process_score, cv, uniformity, angle_effs, angle_cvs = fitness_data
     p_idx1, p_idx2 = parent_indices
     row = {
         "generation": generation,
@@ -157,6 +158,7 @@ def create_log_row(
         "efficiency": f"{efficiency:.6f}",
         "process_score": f"{process_score:.6f}",
         "cv": f"{cv:.6f}",
+        "uniformity": f"{uniformity:.6f}",
         "random_seed": seed if seed is not None else GLOBAL_SEED,
     }
     if angle_effs:
@@ -206,6 +208,7 @@ def check_if_evaluated(fitness_log, individual):
                 efficiency = float(row["efficiency"])
                 process_score = float(row["process_score"])
                 cv = float(row.get("cv", 0.0))
+                uniformity = float(row.get("uniformity", 1.0 - cv))
                 angle_effs = [
                     float(row.get(f"eff_{angle}", 0.0)) for angle in range(10, 90, 10)
                 ]
@@ -217,6 +220,7 @@ def check_if_evaluated(fitness_log, individual):
                     efficiency,
                     process_score,
                     cv,
+                    uniformity,
                     angle_effs,
                     angle_cvs,
                 )
@@ -327,7 +331,7 @@ def main():
                 print(f"  評估初始模型 P{i+1}...")
                 eval_data = evaluate_fitness(folder, individual, return_cv=True)
             else:
-                eval_data = (-999, 0, 0, 0.0, [], [0.0] * 8)  # 給予失敗個體極差的適應度
+                eval_data = (-999, 0, 0, 1.0, 0.0, [], [0.0] * 8)  # 給予失敗個體極差的適應度
 
             parent_eval_data.append(eval_data)
             log_row = create_log_row(
@@ -381,6 +385,7 @@ def main():
                 efficiency = float(row["efficiency"])
                 process_score = float(row["process_score"])
                 cv = float(row.get("cv", 0.0))
+                uniformity = float(row.get("uniformity", 1.0 - cv))
                 angle_effs = [
                     float(row.get(f"eff_{angle}", 0.0)) for angle in range(10, 90, 10)
                 ]
@@ -393,6 +398,7 @@ def main():
                         efficiency,
                         process_score,
                         cv,
+                        uniformity,
                         angle_effs,
                         angle_cvs,
                     )
