@@ -86,8 +86,16 @@ def load_fitness_log():
 def save_fitness_log(fitness_log):
     with open(fitness_log_path, mode="w", newline="") as f:
         # fieldnames = ["S1", "S2", "A1", "fitness", "efficiency", "process_score", "generation"]
-        fieldnames = ["S1", "S2", "A1", "fitness", "efficiency", "process_score", "generation"] + \
-             [f"eff_{angle}" for angle in range(10, 90, 10)]
+        fieldnames = [
+            "S1",
+            "S2",
+            "A1",
+            "fitness",
+            "efficiency",
+            "process_score",
+            "cv",
+            "generation",
+        ] + [f"eff_{angle}" for angle in range(10, 90, 10)]
 
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
@@ -96,8 +104,16 @@ def save_fitness_log(fitness_log):
 
 def save_fitness_log_backup(fitness_log, generation):
     backup_path = os.path.join(onedrive_root, f"generation_{generation}.csv")
-    fieldnames = ["S1", "S2", "A1", "fitness", "efficiency", "process_score", "generation"] + \
-                 [f"eff_{angle}" for angle in range(10, 90, 10)]
+    fieldnames = [
+        "S1",
+        "S2",
+        "A1",
+        "fitness",
+        "efficiency",
+        "process_score",
+        "cv",
+        "generation",
+    ] + [f"eff_{angle}" for angle in range(10, 90, 10)]
     with open(backup_path, mode="w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
@@ -111,11 +127,21 @@ def check_if_evaluated(fitness_log, individual):
             fitness = float(row["fitness"])
             efficiency = float(row["efficiency"])
             process_score = float(row["process_score"])
+            cv = float(row.get("cv", 0))
             angle_effs = [float(row.get(f"eff_{angle}", 0)) for angle in range(10, 90, 10)]
-            return True, (fitness, efficiency, process_score, angle_effs)
+            return True, (fitness, efficiency, process_score, cv, angle_effs)
     return False, None
 
-def append_fitness(fitness_log, individual, fitness, efficiency, process_score, generation, angle_effs=None):
+def append_fitness(
+    fitness_log,
+    individual,
+    fitness,
+    efficiency,
+    process_score,
+    cv,
+    generation,
+    angle_effs=None,
+):
     S1, S2, A1 = map(str, individual)
     row = {
         "S1": S1,
@@ -124,6 +150,7 @@ def append_fitness(fitness_log, individual, fitness, efficiency, process_score, 
         "fitness": str(fitness),
         "efficiency": str(efficiency),
         "process_score": str(process_score),
+        "cv": str(cv),
         "generation": str(generation)
     }
 
@@ -177,18 +204,40 @@ for g in range(N_GENERATIONS):
         is_evaluated, eval_data = check_if_evaluated(fitness_log, individual)
 
         if is_evaluated:
-            fitness, efficiency, process_score, angle_effs = eval_data
+            fitness, efficiency, process_score, cv, angle_effs = eval_data
             print(f"📄 讀取已存在的 fitness P{i+1}: {fitness:.4f}")
-            append_fitness(fitness_log, individual, fitness, efficiency, process_score, g + 1, angle_effs)
+            append_fitness(
+                fitness_log,
+                individual,
+                fitness,
+                efficiency,
+                process_score,
+                cv,
+                g + 1,
+                angle_effs,
+            )
         else:
             try:
-                fitness, efficiency, process_score, angle_effs = evaluate_fitness(folder, individual)
-                print(f"📊 評估完成 P{i+1}: {fitness:.4f} (eff: {efficiency:.4f}, proc: {process_score:.4f})")
+                fitness, efficiency, process_score, cv, angle_effs = evaluate_fitness(
+                    folder, individual, return_cv=True
+                )
+                print(
+                    f"📊 評估完成 P{i+1}: {fitness:.4f} (eff: {efficiency:.4f}, proc: {process_score:.4f}, cv: {cv:.4f})"
+                )
             except Exception as e:
                 print(f"⚠️ P{i+1} 評估錯誤: {e}")
-                fitness, efficiency, process_score, angle_effs = 0.01, 0.0, 1.0, [0]*8
+                fitness, efficiency, process_score, cv, angle_effs = 0.01, 0.0, 1.0, 0.0, [0] * 8
 
-            append_fitness(fitness_log, individual, fitness, efficiency, process_score, g + 1, angle_effs)
+            append_fitness(
+                fitness_log,
+                individual,
+                fitness,
+                efficiency,
+                process_score,
+                cv,
+                g + 1,
+                angle_effs,
+            )
 
             # append_fitness(fitness_log, individual, fitness, efficiency, process_score, g + 1)
 

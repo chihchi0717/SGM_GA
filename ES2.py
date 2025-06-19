@@ -120,6 +120,7 @@ def save_generation_log(generation_data, file_path):
             "fitness",
             "efficiency",
             "process_score",
+            "cv",
         ]
         + [f"eff_{angle}" for angle in range(10, 90, 10)]
         + ["random_seed"]
@@ -138,7 +139,7 @@ def create_log_row(
     individual, sigma, fitness_data, generation, role, parent_indices, seed=None
 ):
     """建立一筆日誌紀錄的字典物件"""
-    fitness, efficiency, process_score, angle_effs = fitness_data
+    fitness, efficiency, process_score, cv, angle_effs = fitness_data
     p_idx1, p_idx2 = parent_indices
     row = {
         "generation": generation,
@@ -154,6 +155,7 @@ def create_log_row(
         "fitness": f"{fitness:.6f}",
         "efficiency": f"{efficiency:.6f}",
         "process_score": f"{process_score:.6f}",
+        "cv": f"{cv:.6f}",
         "random_seed": seed if seed is not None else GLOBAL_SEED,
     }
     if angle_effs:
@@ -199,10 +201,11 @@ def check_if_evaluated(fitness_log, individual):
                 fitness = float(row["fitness"])
                 efficiency = float(row["efficiency"])
                 process_score = float(row["process_score"])
+                cv = float(row.get("cv", 0.0))
                 angle_effs = [
                     float(row.get(f"eff_{angle}", 0.0)) for angle in range(10, 90, 10)
                 ]
-                return True, (fitness, efficiency, process_score, angle_effs)
+                return True, (fitness, efficiency, process_score, cv, angle_effs)
             except (ValueError, KeyError):
                 continue
     return False, None
@@ -230,7 +233,7 @@ def simulate_and_evaluate(folder, individual):
     while True:
         try:
             tracepro_fast(os.path.join(folder, "Sim.scm"))
-            return evaluate_fitness(folder, individual)
+            return evaluate_fitness(folder, individual, return_cv=True)
         except Exception as e:
             print(f"⚠️ tracepro/evaluate_fitness(parent {individual}) 失敗: {e}")
             time.sleep(1)
@@ -308,9 +311,9 @@ def main():
             folder = os.path.join(save_root, f"P{i+1}")
             if build_results[i]:
                 print(f"  評估初始模型 P{i+1}...")
-                eval_data = evaluate_fitness(folder, individual)
+                eval_data = evaluate_fitness(folder, individual, return_cv=True)
             else:
-                eval_data = (-999, 0, 0, [])  # 給予失敗個體極差的適應度
+                eval_data = (-999, 0, 0, 0.0, [])  # 給予失敗個體極差的適應度
 
             parent_eval_data.append(eval_data)
             log_row = create_log_row(
@@ -363,11 +366,12 @@ def main():
                 fitness = float(row["fitness"])
                 efficiency = float(row["efficiency"])
                 process_score = float(row["process_score"])
+                cv = float(row.get("cv", 0.0))
                 angle_effs = [
                     float(row.get(f"eff_{angle}", 0.0)) for angle in range(10, 90, 10)
                 ]
                 parent_eval_data.append(
-                    (fitness, efficiency, process_score, angle_effs)
+                    (fitness, efficiency, process_score, cv, angle_effs)
                 )
                 print(f"  [DEBUG] 已恢復親代 {i}: Gene={gene}, Fitness={fitness:.4f}")
             except (ValueError, KeyError) as e:
@@ -467,7 +471,7 @@ def main():
             for i in needs_processing_indices:
                 folder = os.path.join(save_root, f"P{i+1}")
                 print(f"  評估子代模型 P{i+1}...")
-                eval_data = evaluate_fitness(folder, children_genes[i])
+                eval_data = evaluate_fitness(folder, children_genes[i], return_cv=True)
                 offspring_eval_data[i] = eval_data
                 log_row = create_log_row(
                     children_genes[i],

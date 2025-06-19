@@ -60,7 +60,13 @@ def compute_regression_score(S1, S2, A1):
 
 # === 加權導光效率計算 ===
 def evaluate_fitness(
-    folder, individual, theta_u2=100, sigma_up=60, sigma_down=15, theta_d=22
+    folder,
+    individual,
+    theta_u2=100,
+    sigma_up=60,
+    sigma_down=15,
+    theta_d=22,
+    return_cv=False,
 ):
     S1, S2, A1 = individual
     weighted_efficiency_total = 0
@@ -137,7 +143,11 @@ def evaluate_fitness(
     fitness = (efficiency / (1 + process_score)) * (1 / (1 + alpha * cv_up))
 
     print(f"CV (θ > 90°): {cv_up:.4f}")
-    return fitness, efficiency, process_score, efficiencies_per_angle
+
+    if return_cv:
+        return fitness, efficiency, process_score, efficiencies_per_angle, cv_up
+    else:
+        return fitness, efficiency, process_score, efficiencies_per_angle
 
 
 # fitness, efficiency, process_score, efficiencies_per_angle = evaluate_fitness(
