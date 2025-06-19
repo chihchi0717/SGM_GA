@@ -123,6 +123,7 @@ def save_generation_log(generation_data, file_path):
             "cv",
         ]
         + [f"eff_{angle}" for angle in range(10, 90, 10)]
+        + [f"cv_{angle}" for angle in range(10, 90, 10)]
         + ["random_seed"]
     )
 
@@ -139,7 +140,7 @@ def create_log_row(
     individual, sigma, fitness_data, generation, role, parent_indices, seed=None
 ):
     """建立一筆日誌紀錄的字典物件"""
-    fitness, efficiency, process_score, cv, angle_effs = fitness_data
+    fitness, efficiency, process_score, cv, angle_effs, angle_cvs = fitness_data
     p_idx1, p_idx2 = parent_indices
     row = {
         "generation": generation,
@@ -161,6 +162,9 @@ def create_log_row(
     if angle_effs:
         for angle, eff in zip(range(10, 90, 10), angle_effs):
             row[f"eff_{angle}"] = f"{eff:.6f}"
+    if angle_cvs:
+        for angle, cv_a in zip(range(10, 90, 10), angle_cvs):
+            row[f"cv_{angle}"] = f"{cv_a:.6f}"
     return row
 
 
@@ -205,7 +209,17 @@ def check_if_evaluated(fitness_log, individual):
                 angle_effs = [
                     float(row.get(f"eff_{angle}", 0.0)) for angle in range(10, 90, 10)
                 ]
-                return True, (fitness, efficiency, process_score, cv, angle_effs)
+                angle_cvs = [
+                    float(row.get(f"cv_{angle}", 0.0)) for angle in range(10, 90, 10)
+                ]
+                return True, (
+                    fitness,
+                    efficiency,
+                    process_score,
+                    cv,
+                    angle_effs,
+                    angle_cvs,
+                )
             except (ValueError, KeyError):
                 continue
     return False, None
@@ -313,7 +327,7 @@ def main():
                 print(f"  評估初始模型 P{i+1}...")
                 eval_data = evaluate_fitness(folder, individual, return_cv=True)
             else:
-                eval_data = (-999, 0, 0, 0.0, [])  # 給予失敗個體極差的適應度
+                eval_data = (-999, 0, 0, 0.0, [], [0.0] * 8)  # 給予失敗個體極差的適應度
 
             parent_eval_data.append(eval_data)
             log_row = create_log_row(
@@ -370,8 +384,18 @@ def main():
                 angle_effs = [
                     float(row.get(f"eff_{angle}", 0.0)) for angle in range(10, 90, 10)
                 ]
+                angle_cvs = [
+                    float(row.get(f"cv_{angle}", 0.0)) for angle in range(10, 90, 10)
+                ]
                 parent_eval_data.append(
-                    (fitness, efficiency, process_score, cv, angle_effs)
+                    (
+                        fitness,
+                        efficiency,
+                        process_score,
+                        cv,
+                        angle_effs,
+                        angle_cvs,
+                    )
                 )
                 print(f"  [DEBUG] 已恢復親代 {i}: Gene={gene}, Fitness={fitness:.4f}")
             except (ValueError, KeyError) as e:

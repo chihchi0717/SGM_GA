@@ -74,6 +74,7 @@ def evaluate_fitness(
     efficiencies_per_angle = []
 
     weights = [1, 2, 5, 7, 5, 8.5, 1.5, 2]
+    cvs_per_angle = []
 
     for idx, angle in enumerate(range(10, 90, 10)):
         txt_path = os.path.join(folder, f"polar-{angle}.txt")
@@ -86,6 +87,7 @@ def evaluate_fitness(
             weighted_energy = 0
             weight_debug_sum = 0  # 為了印出此角度的權重總和
 
+            intensities_up = []
             for theta, flux in zip(angles, intensities):
                 # 預設權重為 0，避免意外錯誤導致 w 未定義
                 if theta > 90:
@@ -105,10 +107,19 @@ def evaluate_fitness(
 
                 weighted_energy += flux * w
                 weight_debug_sum += w
+                if theta > 90:
+                    intensities_up.append(flux)
                 # print(f"    θ = {theta:6.1f}°, flux = {flux:.4e}, weight = {w:.4f}")
 
             eff = float(weighted_energy / total_energy) if total_energy > 0 else 0.0
             efficiencies_per_angle.append(eff)
+            if intensities_up:
+                mean_up = np.mean(intensities_up)
+                std_up = np.std(intensities_up)
+                cv_up_angle = std_up / mean_up if mean_up > 0 else 0.0
+            else:
+                cv_up_angle = 0.0
+            cvs_per_angle.append(cv_up_angle)
             weighted_efficiency_total += eff * weights[idx]
             weight_sum += weights[idx]
 
@@ -145,7 +156,14 @@ def evaluate_fitness(
     print(f"CV (θ > 90°): {cv_up:.4f}")
 
     if return_cv:
-        return fitness, efficiency, process_score, cv_up, efficiencies_per_angle
+        return (
+            fitness,
+            efficiency,
+            process_score,
+            cv_up,
+            efficiencies_per_angle,
+            cvs_per_angle,
+        )
     else:
         return fitness, efficiency, process_score, efficiencies_per_angle
 

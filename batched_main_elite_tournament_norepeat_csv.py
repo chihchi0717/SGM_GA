@@ -95,7 +95,9 @@ def save_fitness_log(fitness_log):
             "process_score",
             "cv",
             "generation",
-        ] + [f"eff_{angle}" for angle in range(10, 90, 10)]
+        ] + [f"eff_{angle}" for angle in range(10, 90, 10)] + [
+            f"cv_{angle}" for angle in range(10, 90, 10)
+        ]
 
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
@@ -113,7 +115,9 @@ def save_fitness_log_backup(fitness_log, generation):
         "process_score",
         "cv",
         "generation",
-    ] + [f"eff_{angle}" for angle in range(10, 90, 10)]
+    ] + [f"eff_{angle}" for angle in range(10, 90, 10)] + [
+        f"cv_{angle}" for angle in range(10, 90, 10)
+    ]
     with open(backup_path, mode="w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
@@ -129,7 +133,8 @@ def check_if_evaluated(fitness_log, individual):
             process_score = float(row["process_score"])
             cv = float(row.get("cv", 0))
             angle_effs = [float(row.get(f"eff_{angle}", 0)) for angle in range(10, 90, 10)]
-            return True, (fitness, efficiency, process_score, cv, angle_effs)
+            angle_cvs = [float(row.get(f"cv_{angle}", 0)) for angle in range(10, 90, 10)]
+            return True, (fitness, efficiency, process_score, cv, angle_effs, angle_cvs)
     return False, None
 
 def append_fitness(
@@ -141,6 +146,7 @@ def append_fitness(
     cv,
     generation,
     angle_effs=None,
+    angle_cvs=None,
 ):
     S1, S2, A1 = map(str, individual)
     row = {
@@ -157,6 +163,9 @@ def append_fitness(
     if angle_effs:
         for angle, eff in zip(range(10, 90, 10), angle_effs):
             row[f"eff_{angle}"] = str(eff)
+    if angle_cvs:
+        for angle, cv_a in zip(range(10, 90, 10), angle_cvs):
+            row[f"cv_{angle}"] = str(cv_a)
 
     fitness_log.append(row)
     save_fitness_log(fitness_log)
@@ -204,7 +213,7 @@ for g in range(N_GENERATIONS):
         is_evaluated, eval_data = check_if_evaluated(fitness_log, individual)
 
         if is_evaluated:
-            fitness, efficiency, process_score, cv, angle_effs = eval_data
+            fitness, efficiency, process_score, cv, angle_effs, angle_cvs = eval_data
             print(f"📄 讀取已存在的 fitness P{i+1}: {fitness:.4f}")
             append_fitness(
                 fitness_log,
@@ -215,10 +224,11 @@ for g in range(N_GENERATIONS):
                 cv,
                 g + 1,
                 angle_effs,
+                angle_cvs,
             )
         else:
             try:
-                fitness, efficiency, process_score, cv, angle_effs = evaluate_fitness(
+                fitness, efficiency, process_score, cv, angle_effs, angle_cvs = evaluate_fitness(
                     folder, individual, return_cv=True
                 )
                 print(
@@ -226,7 +236,7 @@ for g in range(N_GENERATIONS):
                 )
             except Exception as e:
                 print(f"⚠️ P{i+1} 評估錯誤: {e}")
-                fitness, efficiency, process_score, cv, angle_effs = 0.01, 0.0, 1.0, 0.0, [0] * 8
+                fitness, efficiency, process_score, cv, angle_effs, angle_cvs = 0.01, 0.0, 1.0, 0.0, [0] * 8, [0.0] * 8
 
             append_fitness(
                 fitness_log,
@@ -237,6 +247,7 @@ for g in range(N_GENERATIONS):
                 cv,
                 g + 1,
                 angle_effs,
+                angle_cvs,
             )
 
             # append_fitness(fitness_log, individual, fitness, efficiency, process_score, g + 1)
