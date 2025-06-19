@@ -135,6 +135,7 @@ def evaluate_fitness(
         except Exception as e:
             print(f"無法處理 {txt_path}: {e}")
             efficiencies_per_angle.append(0.0)
+            cvs_per_angle.append(1.0)
             continue
 
     efficiency = weighted_efficiency_total / weight_sum if weight_sum > 0 else 0
