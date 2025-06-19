@@ -120,6 +120,7 @@ def evaluate_fitness(
             else:
                 cv_up_angle = 1.0
             uniformity_angle = 1.0 - cv_up_angle
+
             if uniformity_angle < 0:
                 uniformity_angle = 0.0
             uniformities_per_angle.append(uniformity_angle)
@@ -184,7 +185,7 @@ def evaluate_fitness(
             fitness,
             efficiency,
             process_score,
-            uniformity,
+            uni_norm,
             efficiencies_per_angle,
             uniformities_per_angle,
         )
