@@ -92,6 +92,7 @@ def evaluate_fitness(
                 # 預設權重為 0，避免意外錯誤導致 w 未定義
                 if theta > 90:
                     # 向上光線，θ > 90°
+                    w = 1
                     # w = gaussian_weight(
                     #     theta,
                     #     center=theta_u2,
@@ -100,8 +101,7 @@ def evaluate_fitness(
                     #     theta_max=180,
                     #     peak=0.5,
                     #     base=0.5,
-                    # )
-                    w = 1
+                    # )    
                 else:
                     w = 0
 
@@ -116,10 +116,16 @@ def evaluate_fitness(
             if intensities_up:
                 mean_up = np.mean(intensities_up)
                 std_up = np.std(intensities_up)
-                cv_up_angle = std_up / mean_up if mean_up > 0 else 1.0
+                if mean_up == 0:
+                    cv_up_angle = np.nan
+                else:
+                    cv_up_angle = std_up / mean_up
+                uniformity_angle = 1 / (1 + cv_up_angle)
+                if not np.isfinite(uniformity_angle):
+                    uniformity_angle = 0.0
             else:
-                cv_up_angle = 1.0
-            uniformity_angle = 1.0 - cv_up_angle
+                uniformity_angle = 0.0
+
 
             if uniformity_angle < 0:
                 uniformity_angle = 0.0
@@ -151,8 +157,10 @@ def evaluate_fitness(
     # fitness = efficiency * (1 / (1 + process_score))
     # return fitness, efficiency, process_score, efficiencies_per_angle
     if uniformities_per_angle:
-        uniformity = float(np.mean(uniformities_per_angle))
+        uniformity = float(np.nanmean(uniformities_per_angle))
     else:
+        uniformity = 0.0
+    if not np.isfinite(uniformity):
         uniformity = 0.0
 
     # === Step 1: 設定標準化上下限 ===
@@ -173,7 +181,7 @@ def evaluate_fitness(
     uni_norm = np.clip(uni_norm, 0, 1)
 
     # === Step 5: 最終目標函數 ===
-    fitness = eff_norm + proc_norm + uni_norm
+    fitness = (eff_norm + proc_norm + uni_norm) / 3
 
     # === Step 6: 顯示 log（可選） ===
     print(
