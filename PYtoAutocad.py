@@ -32,7 +32,7 @@ def retry_autocad_call(func, retries: int = 3, wait_time: int = 5):
                 raise
 
 
-def send_command_with_retry(acad, command: str, retries: int = 5, delay: int = 2):
+def send_command_with_retry(acad, command: str, retries: int = 5, delay: int = 10):
     """Send a raw command string to AutoCAD with retry logic."""
     for attempt in range(retries):
         try:
@@ -183,7 +183,7 @@ class PrismBuilder:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-    def build(self, sid_ang, mode: str, paths: OutputPaths) -> None:
+    def build(self, sid_ang, mode: str, paths: OutputPaths, fillet = 0) -> None:
         side_a = round(sid_ang[0], 2)
         side_b = round(sid_ang[1], 2)
         angle_B = sid_ang[2]
@@ -196,34 +196,117 @@ class PrismBuilder:
         equ_bc = lambda x: slope_bc * x + intercept_bc
         top = (math.floor(equ_bc(0) / self.pixel_size)) * self.pixel_size
         bottom = (math.ceil(equ_ac(0) / self.pixel_size)) * self.pixel_size
-
+        print(f"Cx: {Cx:.2f}, Cy: {Cy:.2f}")
         if mode == "triangle":
             top = equ_bc(0)
             bottom = equ_ac(0)
             self._draw_triangle(A, B, C)
+            send_command_with_retry(
+                self.acad,
+                f"_.ZOOM\nE\n\n",
+            )
+            if fillet == 0:
+                rows, columns = 30, 1
+                row_spacing = side_a * self.scale * (rows - 1)
+                column_spacing = 1
+                send_command_with_retry(
+                    self.acad,
+                    f"ARRAY\nALL\n\nR\nCOL\n{columns}\nT\n{column_spacing}\nR\n{rows}\nT\n{row_spacing}\n0\nX\n",
+                )
+
+                send_command_with_retry(self.acad, "Explode\nALL\n\n")
+                send_command_with_retry(self.acad, "ZOOM\nE\n")
+
+            if fillet == 1:
+                radius = 0.066  # 0.05
+                x = round(Cx * self.scale, 1)
+                y = round(Cy * self.scale, 1)
+                corner_x1 = x + 0.5
+                corner_y1 = y - 0.5
+                corner_x2 = x - 0.5
+                corner_y2 = y + 0.5
+
+                send_command_with_retry(
+                    self.acad,
+                    f"FILLET\nRadius\n{radius}\nC\n{corner_x1},{corner_y1}\n{corner_x2},{corner_y2}\n",
+                )
+                rows, columns = 30, 1
+                row_spacing = side_a * self.scale * (rows - 1)
+                column_spacing = 1
+                send_command_with_retry(
+                    self.acad,
+                    f"ARRAY\nALL\n\nR\nCOL\n{columns}\nT\n{column_spacing}\nR\n{rows}\nT\n{row_spacing}\n0\nX\n",
+                )
+
+                send_command_with_retry(self.acad, "Explode\nALL\n\n")
+                send_command_with_retry(self.acad, "ZOOM\nE\n")
+
+            if fillet == 2:
+                radius = 0.066  # 0.05
+                x = round(Cx * self.scale, 1)
+                y = round(Cy * self.scale, 1)
+                corner_x1 = x + 0.5
+                corner_y1 = y - 0.5
+                corner_x2 = x - 0.5
+                corner_y2 = y + 0.5
+
+                send_command_with_retry(
+                    self.acad,
+                    f"FILLET\nRadius\n{radius}\nC\n{corner_x1},{corner_y1}\n{corner_x2},{corner_y2}\n",
+                )
+                rows, columns = 2, 1
+                row_spacing = side_a * self.scale * (rows - 1)
+                column_spacing = 1
+                send_command_with_retry(
+                    self.acad,
+                    f"ARRAY\nALL\n\nR\nCOL\n{columns}\nT\n{column_spacing}\nR\n{rows}\nT\n{row_spacing}\n0\nX\n",
+                )
+
+                send_command_with_retry(self.acad, "Explode\nALL\n\n")
+                send_command_with_retry(
+                    self.acad,
+                    f"_.ZOOM\nE\n\n",
+                )
+                x = round((Cx / 2) * self.scale, 1)
+                y = round((Cy / 2) * self.scale, 1)
+                print(f"Fillet corner at: ({x}, {y})")
+                corner_x3 = 0.4
+                corner_y3 = 0.2
+                corner_x4 = 0.1
+                corner_y4 = 0.7
+                equ_bc(corner_x3)
+
+                send_command_with_retry(
+                    self.acad,
+                    f"FILLET\nRadius\n{radius}\nC\n{corner_x3},{corner_y3}\n{corner_x4},{corner_y4}\n",
+                )
+                rows, columns = 30, 1
+                row_spacing = side_a * self.scale * (rows - 1)
+                column_spacing = 1
+                send_command_with_retry(
+                    self.acad,
+                    f"ARRAY\nC\n{Cx+0.05},{top+0.05}\n{0},{top*1.8+0.05}\n\nR\nCOL\n{columns}\nT\n{column_spacing}\nR\n{rows}\nT\n{row_spacing}\n0\nX\n",
+                )
+                send_command_with_retry(self.acad, "Explode\nALL\n\n")
+
+                send_command_with_retry(self.acad, "ZOOM\nE\n")
+                send_command_with_retry(
+                    self.acad, f"TRIM\n{0.1},{top*1.5}\n{0.1},{top*30}\n\n"
+                )
+                send_command_with_retry(self.acad, "SELECT\nALL\n\nJOIN\nALL\n\n")
+                send_command_with_retry(self.acad, "SELECT\nALL\n\n_JOIN\n\n")
+                send_command_with_retry(self.acad, "ZOOM\nE\n\n")
+
+                send_command_with_retry(self.acad, f"-BOUNDARY\n{Ix},{Iy}\n\n")
+                send_command_with_retry(self.acad, "_EXTRUDE\nL\n\n1\n")
+                time.sleep(self.sleep_time)
+                send_command_with_retry(self.acad, "UNION\nALL\n\n")
+
         elif mode == "stair":
             self._draw_stair(equ_ac, equ_bc, bottom, top)
         else:
             raise ValueError("mode must be 'stair' or 'triangle'")
 
-        send_command_with_retry(self.acad, "SELECT\nALL\n\n_JOIN\n\n")
-        send_command_with_retry(self.acad, "ZOOM\nE\n\n")
-        send_command_with_retry(self.acad, f"-BOUNDARY\n{Ix},{Iy}\n\n")
-        send_command_with_retry(self.acad, "_EXTRUDE\nL\n\n1\n")
-        time.sleep(self.sleep_time)
-        send_command_with_retry(self.acad, "UNION\nALL\n\n")
-
-        rows, columns = 30, 1
-        row_spacing = side_a * self.scale * (rows - 1)
-        column_spacing = 1
-        send_command_with_retry(
-            self.acad,
-            f"ARRAY\nALL\n\nR\nCOL\n{columns}\nT\n{column_spacing}\nR\n{rows}\nT\n{row_spacing}\n0\nX\n",
-        )
-
-        time.sleep(self.sleep_time)
-        send_command_with_retry(self.acad, "Explode\nALL\n\n")
-        send_command_with_retry(self.acad, "UNION\nALL\n\n")
 
         light_source_length = 0.5
         actual_array_top = top + (rows - 1) * (top - bottom)
@@ -253,7 +336,7 @@ class PrismBuilder:
             time.sleep(1)
 
         if os.path.exists(paths.sat_path) and os.path.exists(paths.dwg_path):
-            send_command_with_retry(self.acad, "close\n")
+            # send_command_with_retry(self.acad, "close\n")
             time.sleep(2)
         else:
             print(f"❌ 最終仍未成功產生檔案：{paths.sat_path} 或 {paths.dwg_path}。")
@@ -275,7 +358,7 @@ def Build_model(sid_ang, mode: str = "stair", folder: str = "."):
             except Exception as e:  # pragma: no cover - file system access
                 print(f"⚠️ 無法刪除舊檔案 {p}: {e}")
     builder = PrismBuilder(scale=1)
-    builder.build(sid_ang, mode=mode, paths=paths)
+    builder.build(sid_ang, mode=mode, paths=paths, fillet=1)
     return 1, []
 
 
@@ -283,6 +366,10 @@ def Build_model(sid_ang, mode: str = "stair", folder: str = "."):
 # Script entry point
 # ---------------------------------------------------------------------------
 
-# if __name__ == "__main__":
-#     sid_ang = [0.48, 0.98, 85]
-#     Build_model(sid_ang, mode="triangle", folder=".")
+if __name__ == "__main__":
+    sid_ang = [0.46, 0.9, 81]
+    Build_model(
+        sid_ang,
+        mode="triangle",
+        folder=r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202506\0620",
+    )
