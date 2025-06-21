@@ -77,8 +77,8 @@ def evaluate_fitness(folder, individual, return_uniformity=False, process_weight
     When ``return_uniformity`` is ``True``, the upward energy distribution for
     each measurement angle is analyzed. The standard deviation of the upward
     energy (polar angle > 90°) is computed per angle and returned as
-    ``uni_10`` .. ``uni_80``. The ``uniformity`` metric is then the average of
-    these per-angle standard deviations.
+    ``uni_10`` .. ``uni_80``. ``uniformity`` is the mean of these per-angle
+    values and contributes to the fitness score as ``1/(1 + uniformity)``.
     """
     # ``individual`` can sometimes contain more than three values. Only the
     # first three parameters (S1, S2, A1) are relevant for this evaluation.
@@ -147,11 +147,17 @@ def evaluate_fitness(folder, individual, return_uniformity=False, process_weight
     except Exception as e:
         print(f"⚠️ 製程品質評估失敗: {e}")
         process_score = 1.0
-    
-    fitness = efficiency * (1 / (1 + process_weight * process_score))
 
     if return_uniformity:
         uniformity = float(np.mean(upward_stds)) if upward_stds else 0.0
+        uniformity_factor = 1 / (1 + uniformity)
+    else:
+        uniformity = 0.0
+        uniformity_factor = 1.0
+
+    fitness = efficiency * uniformity_factor * (1 / (1 + process_weight * process_score))
+
+    if return_uniformity:
         return (
             fitness,
             efficiency,
