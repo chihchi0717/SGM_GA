@@ -55,7 +55,7 @@ class OutputPaths:
     """Paths used when exporting AutoCAD files."""
 
     folder: str
-    sat_name: str = "prism_sat_file-print_sub1.SAT"
+    sat_name: str  # = "prism_sat_file-print_0.46_0.95_85.SAT"
     dwg_name: str = "Drawing.dwg"
     center_y_name: str = "center_y.txt"
     center_x_name: str = "center_x.txt"
@@ -198,7 +198,18 @@ class PrismBuilder:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-    def build(self, sid_ang, mode: str, paths: OutputPaths) -> None:
+    def build(
+        self,
+        sid_ang,
+        mode: str,
+        paths: OutputPaths,
+        sub_length_x,
+        base_length_y,
+        sub_thickness,
+        base_length_x,
+        base_thickness,
+        fillet=1,
+    ) -> None:
         """Build a prism structure in AutoCAD."""
         side_a = round(sid_ang[0], 2)
         side_b = round(sid_ang[1], 2)
@@ -214,52 +225,167 @@ class PrismBuilder:
         bottom = (math.ceil(equ_ac(0) / self.pixel_size)) * self.pixel_size
 
         if mode == "triangle":
+            top = equ_bc(0)
+            bottom = equ_ac(0)
             self._draw_triangle(A, B, C)
+            send_command_with_retry(
+                self.acad,
+                f"_.ZOOM\nE\n\n",
+            )
+            if fillet == 0:
+                rows, columns = 30, 1
+                row_spacing = side_a * self.scale * (rows - 1)
+                column_spacing = 1
+                send_command_with_retry(
+                    self.acad,
+                    f"ARRAY\nALL\n\nR\nCOL\n{columns}\nT\n{column_spacing}\nR\n{rows}\nT\n{row_spacing}\n0\nX\n",
+                )
+
+                send_command_with_retry(self.acad, "Explode\nALL\n\n")
+                send_command_with_retry(self.acad, "ZOOM\nE\n")
+
+            if fillet == 1:
+                radius = 0.088  # 0.05
+                x = round(Cx * self.scale, 1)
+                y = round(Cy * self.scale, 1)
+                corner_x1 = x + 0.5
+                corner_y1 = y - 0.5
+                corner_x2 = x - 0.5
+                corner_y2 = y + 0.5
+
+                send_command_with_retry(
+                    self.acad,
+                    f"FILLET\nRadius\n{radius}\nC\n{corner_x1},{corner_y1}\n{corner_x2},{corner_y2}\n",
+                )
+                rows, columns = int(base_length_y / side_a), 1  # 30, 1
+                row_spacing = side_a * self.scale * (rows - 1)
+                column_spacing = 1
+                send_command_with_retry(
+                    self.acad,
+                    f"ARRAY\nALL\n\nR\nCOL\n{columns}\nT\n{column_spacing}\nR\n{rows}\nT\n{row_spacing}\n0\nX\n",
+                )
+
+                send_command_with_retry(self.acad, "Explode\nALL\n\n")
+                send_command_with_retry(self.acad, "ZOOM\nE\n")
+
+                send_command_with_retry(self.acad, "SELECT\nALL\n\nJOIN\nALL\n\n")
+                send_command_with_retry(self.acad, "SELECT\nALL\n\n_JOIN\n\n")
+                send_command_with_retry(self.acad, "ZOOM\nE\n\n")
+
+                # send_command_with_retry(self.acad, f"-BOUNDARY\n{Ix},{Iy}\n\n")
+                send_command_with_retry(
+                    self.acad, f"_EXTRUDE\nALL\n\n{base_thickness}\n"
+                )
+                time.sleep(self.sleep_time)
+                send_command_with_retry(self.acad, "UNION\nALL\n\n")
+
+            if fillet == 2:
+                radius = 0.066  # 0.05
+                x = round(Cx * self.scale, 1)
+                y = round(Cy * self.scale, 1)
+                corner_x1 = x + 0.5
+                corner_y1 = y - 0.5
+                corner_x2 = x - 0.5
+                corner_y2 = y + 0.5
+
+                send_command_with_retry(
+                    self.acad,
+                    f"FILLET\nRadius\n{radius}\nC\n{corner_x1},{corner_y1}\n{corner_x2},{corner_y2}\n",
+                )
+                rows, columns = 2, 1
+                row_spacing = side_a * self.scale * (rows - 1)
+                column_spacing = 1
+                send_command_with_retry(
+                    self.acad,
+                    f"ARRAY\nALL\n\nR\nCOL\n{columns}\nT\n{column_spacing}\nR\n{rows}\nT\n{row_spacing}\n0\nX\n",
+                )
+
+                send_command_with_retry(self.acad, "Explode\nALL\n\n")
+                send_command_with_retry(
+                    self.acad,
+                    f"_.ZOOM\nE\n\n",
+                )
+                x = round((Cx / 2) * self.scale, 1)
+                y = round((Cy / 2) * self.scale, 1)
+                print(f"Fillet corner at: ({x}, {y})")
+                corner_x3 = 0.4
+                corner_y3 = 0.2
+                corner_x4 = 0.1
+                corner_y4 = 0.7
+                equ_bc(corner_x3)
+
+                send_command_with_retry(
+                    self.acad,
+                    f"FILLET\nRadius\n{radius}\nC\n{corner_x3},{corner_y3}\n{corner_x4},{corner_y4}\n",
+                )
+                rows, columns = 30, 1
+                row_spacing = side_a * self.scale * (rows - 1)
+                column_spacing = 1
+                send_command_with_retry(
+                    self.acad,
+                    f"ARRAY\nC\n{Cx+0.05},{top+0.05}\n{0},{top*1.8+0.05}\n\nR\nCOL\n{columns}\nT\n{column_spacing}\nR\n{rows}\nT\n{row_spacing}\n0\nX\n",
+                )
+                send_command_with_retry(self.acad, "Explode\nALL\n\n")
+
+                send_command_with_retry(self.acad, "ZOOM\nE\n")
+                send_command_with_retry(
+                    self.acad, f"TRIM\n{0.1},{top*1.5}\n{0.1},{top*30}\n\n"
+                )
+                send_command_with_retry(self.acad, "SELECT\nALL\n\nJOIN\nALL\n\n")
+                send_command_with_retry(self.acad, "SELECT\nALL\n\n_JOIN\n\n")
+                send_command_with_retry(self.acad, "ZOOM\nE\n\n")
+
+                send_command_with_retry(self.acad, f"-BOUNDARY\n{Ix},{Iy}\n\n")
+                send_command_with_retry(self.acad, f"_EXTRUDE\nL\n\n{base_thickness}\n")
+                time.sleep(self.sleep_time)
+                send_command_with_retry(self.acad, "UNION\nALL\n\n")
+
         elif mode == "stair":
             self._draw_stair(equ_ac, equ_bc, bottom, top)
         else:
             raise ValueError("mode must be 'stair' or 'triangle'")
 
-        send_command_with_retry(self.acad, "SELECT\nALL\n\n_JOIN\n\n")
-        send_command_with_retry(self.acad, "ZOOM\nE\n\n")
-        send_command_with_retry(
-            self.acad,
-            f"-BOUNDARY\n{round(Ix * self.scale, 4)},{round(Iy * self.scale, 4)}\n\n",
-        )
-        send_command_with_retry(self.acad, "_EXTRUDE\nL\n\n50\n")
-        send_command_with_retry(self.acad, "UNION\nALL\n\n")
-        base_length_y = 55
-        rows = int(base_length_y / (side_a * self.scale))
-        row_spacing = side_a * self.scale * (rows - 1)
-        send_command_with_retry(
-            self.acad,
-            f"ARRAY\nALL\n\nR\nCOL\n1\nT\n1\nR\n{rows}\nT\n{row_spacing}\n0\nX\n",
-        )
-        time.sleep(self.sleep_time)
-        send_command_with_retry(self.acad, "Explode\nALL\n\n")
-        send_command_with_retry(self.acad, "UNION\nALL\n\n")
+        # send_command_with_retry(self.acad, "SELECT\nALL\n\n_JOIN\n\n")
+        # send_command_with_retry(self.acad, "ZOOM\nE\n\n")
+        # send_command_with_retry(
+        #     self.acad,
+        #     f"-BOUNDARY\n{round(Ix * self.scale, 4)},{round(Iy * self.scale, 4)}\n\n",
+        # )
 
-        self._add_substrate(paths)
-        self._add_base(paths, Cx)
+        # send_command_with_retry(self.acad, f"_EXTRUDE\nL\n\n{base_length_y}\n")
+        # send_command_with_retry(self.acad, "UNION\nALL\n\n")
 
-        send_command_with_retry(self.acad, f"Export\n{paths.sat_path}\ny\nALL\n\n")
-        send_command_with_retry(self.acad, f"save\n{paths.dwg_path}\ny\n")
+        # rows = int(base_length_y / (side_a * self.scale))
+        # row_spacing = side_a * self.scale * (rows - 1)
+        # send_command_with_retry(
+        #     self.acad,
+        #     f"ARRAY\nALL\n\nR\nCOL\n1\nT\n1\nR\n{rows}\nT\n{row_spacing}\n0\nX\n",
+        # )
+        # time.sleep(self.sleep_time)
+        # send_command_with_retry(self.acad, "Explode\nALL\n\n")
+        # send_command_with_retry(self.acad, "UNION\nALL\n\n")
+
+        self._add_substrate(paths, sub_length_x, base_length_y, sub_thickness)
+        self._add_base(paths, Cx, base_length_x, base_length_y, base_thickness)
+
+        send_command_with_retry(self.acad, f"Export\n{paths.sat_path}\nY\nALL\n\n")
+        send_command_with_retry(self.acad, f"save\n{paths.dwg_path}\nY\n")
 
     # ------------------------------------------------------------------
-    def _add_substrate(self, paths: OutputPaths):
+    def _add_substrate(self, paths: OutputPaths, x, y, z):
         start_base = APoint(0, 0, 0)
-        sub_length_x = 1.1
-        sub_length_y = 55
-        sub_thickness = 50
+        sub_length_x = x  # 1.1
+        sub_length_y = y  # 30  # 55
+        sub_thickness = z  # 27  # 45
         send_command_with_retry(
             self.acad,
             f"_BOX\n{start_base.x - sub_length_x},{start_base.y},{start_base.z}\n{start_base.x},{start_base.y + sub_length_y},{start_base.z + sub_thickness}\n",
         )
 
-    def _add_base(self, paths: OutputPaths, Cx: float):
-        base_length_x = 10
-        base_length_y = 55
-        base_thickness = 15
+    def _add_base(self, paths: OutputPaths, Cx: float, x, y, z):
+        base_length_x = x  # 10
+        base_length_y = y  # 30  # 55
+        base_thickness = z  # 15
         start_base = APoint(0, 0, 0)
         send_command_with_retry(
             self.acad,
@@ -274,13 +400,23 @@ class PrismBuilder:
 
 def main():
     s = 1  # mm
-    sid_ang = [0.48 * s, 0.98 * s, 85]
-    folder = (
-        r"C:\\Users\\cchih\\Desktop\\NTHU\\MasterThesis\\research_log\\202506\\0618"
-    )
-    paths = OutputPaths(folder)
+    sid_ang = [0.46 * s, 0.9 * s, 81]
+    folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202506\0621"
+    sat_name = os.path.join(folder, "prism_sat_file-print_0.46_0.9_81.SAT")
+    paths = OutputPaths(folder=folder, sat_name=sat_name)
+
     builder = PrismBuilder(scale=1)
-    builder.build(sid_ang, mode="triangle", paths=paths)
+    builder.build(
+        sid_ang,
+        mode="triangle",
+        paths=paths,
+        sub_length_x=1.1,
+        base_length_y=55,
+        sub_thickness=30,
+        base_length_x=10,
+        base_thickness=15,
+        fillet=1,
+    )
 
 
 if __name__ == "__main__":
