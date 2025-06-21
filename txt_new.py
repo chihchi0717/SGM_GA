@@ -74,16 +74,18 @@ def evaluate_fitness(folder, individual, return_uniformity=False, process_weight
     """Evaluate fitness from simulation results in *folder* for the given
     *individual* parameters.
 
-    When ``return_uniformity`` is ``True``, the standard deviation of the
-    upward guiding energy across all angles is calculated and returned as the
-    uniformity metric.
+    When ``return_uniformity`` is ``True``, the upward energy distribution for
+    each measurement angle is analyzed. The standard deviation of the upward
+    energy (polar angle > 90°) is computed per angle and returned as
+    ``uni_10`` .. ``uni_80``. The ``uniformity`` metric is then the average of
+    these per-angle standard deviations.
     """
     S1, S2, A1 = individual
 
     weighted_efficiency_total = 0
     weight_sum = 0
     efficiencies_per_angle = []  # store efficiency for each measurement angle
-    upward_energies = []         # store upward energy for each angle when requested
+    upward_stds = []             # store upward energy standard deviation per angle when requested
 
     weights = [1, 2, 5, 7, 5, 8.5, 1.5, 2]
 
@@ -96,6 +98,7 @@ def evaluate_fitness(folder, individual, return_uniformity=False, process_weight
             data_lines = lines[6:]
             total_energy = 0
             upward_energy = 0
+            upward_values = []
 
             angle_intensities = []
             for line in data_lines:
@@ -109,6 +112,8 @@ def evaluate_fitness(folder, individual, return_uniformity=False, process_weight
                     angle_intensities.append(intensity_col1)
                     if polar_angle > 90:
                         upward_energy += intensity_col1
+                        if return_uniformity:
+                            upward_values.append(intensity_col1)
                 except ValueError:
                     continue
 
@@ -122,7 +127,7 @@ def evaluate_fitness(folder, individual, return_uniformity=False, process_weight
             weight_sum += weights[idx]
 
             if return_uniformity:
-                upward_energies.append(upward_energy)
+                upward_stds.append(np.std(upward_values) if upward_values else 0.0)
 
         except Exception as e:
             
@@ -144,14 +149,14 @@ def evaluate_fitness(folder, individual, return_uniformity=False, process_weight
     fitness = efficiency * (1 / (1 + process_weight * process_score))
 
     if return_uniformity:
-        uniformity = 1/np.std(upward_energies) if upward_energies else 1
+        uniformity = float(np.mean(upward_stds)) if upward_stds else 0.0
         return (
             fitness,
             efficiency,
             process_score,
             uniformity,
             efficiencies_per_angle,
-            upward_energies,
+            upward_stds,
         )
     else:
         return (
