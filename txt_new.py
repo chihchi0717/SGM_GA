@@ -75,7 +75,8 @@ def evaluate_fitness(folder, individual, return_uniformity=False, process_weight
     *individual* parameters.
 
     When ``return_uniformity`` is ``True``, additional uniformity metrics are
-    computed and returned.
+    computed and returned. Each angle's uniformity is calculated as ``1 /`` its
+    intensity standard deviation.
     """
     S1, S2, A1 = individual
 
@@ -122,11 +123,11 @@ def evaluate_fitness(folder, individual, return_uniformity=False, process_weight
 
             if return_uniformity:
                 angle_intensities = np.array(angle_intensities)
-                if angle_intensities.mean() > 0:
-                    cv_a = angle_intensities.std() / angle_intensities.mean()
+                std_a = angle_intensities.std()
+                if std_a > 0:
+                    angle_unis.append(1.0 / std_a)
                 else:
-                    cv_a = 1.0
-                angle_unis.append(max(0.0, 1.0 - cv_a))
+                    angle_unis.append(float("inf"))
 
         except Exception as e:
             
