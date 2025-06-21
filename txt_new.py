@@ -79,6 +79,7 @@ def evaluate_fitness(folder, individual, return_uniformity=False, process_weight
     energy (polar angle > 90°) is computed per angle and returned as
     ``uni_10`` .. ``uni_80``. ``uniformity`` is the mean of these per-angle
     values and contributes to the fitness score as ``1/(1 + uniformity)``.
+    The resulting fitness value is clamped so that a perfect score is ``1``.
     """
     # ``individual`` can sometimes contain more than three values. Only the
     # first three parameters (S1, S2, A1) are relevant for this evaluation.
@@ -156,6 +157,7 @@ def evaluate_fitness(folder, individual, return_uniformity=False, process_weight
         uniformity_factor = 1.0
 
     fitness = efficiency * uniformity_factor * (1 / (1 + process_weight * process_score))
+    fitness = max(0.0, min(fitness, 1.0))
 
     if return_uniformity:
         return (
