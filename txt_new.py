@@ -74,15 +74,16 @@ def evaluate_fitness(folder, individual, return_uniformity=False, process_weight
     """Evaluate fitness from simulation results in *folder* for the given
     *individual* parameters.
 
-    When ``return_uniformity`` is ``True``, additional uniformity metrics are
-    computed and returned.
+    When ``return_uniformity`` is ``True``, the standard deviation of the
+    upward guiding energy across all angles is calculated and returned as the
+    uniformity metric.
     """
     S1, S2, A1 = individual
 
     weighted_efficiency_total = 0
     weight_sum = 0
-    efficiencies_per_angle = []  # 新增儲存各角度效率
-    angle_unis = []
+    efficiencies_per_angle = []  # store efficiency for each measurement angle
+    upward_energies = []         # store upward energy for each angle when requested
 
     weights = [1, 2, 5, 7, 5, 8.5, 1.5, 2]
 
@@ -121,12 +122,7 @@ def evaluate_fitness(folder, individual, return_uniformity=False, process_weight
             weight_sum += weights[idx]
 
             if return_uniformity:
-                angle_intensities = np.array(angle_intensities)
-                if angle_intensities.mean() > 0:
-                    cv_a = angle_intensities.std() / angle_intensities.mean()
-                else:
-                    cv_a = 1.0
-                angle_unis.append(max(0.0, 1.0 - cv_a))
+                upward_energies.append(upward_energy)
 
         except Exception as e:
             
@@ -148,14 +144,14 @@ def evaluate_fitness(folder, individual, return_uniformity=False, process_weight
     fitness = efficiency * (1 / (1 + process_weight * process_score))
 
     if return_uniformity:
-        uniformity = min(angle_unis) if angle_unis else 0.0
+        uniformity = 1/np.std(upward_energies) if upward_energies else 1
         return (
             fitness,
             efficiency,
             process_score,
             uniformity,
             efficiencies_per_angle,
-            angle_unis,
+            upward_energies,
         )
     else:
         return (
