@@ -80,7 +80,9 @@ def evaluate_fitness(folder, individual, return_uniformity=False, process_weight
     ``uni_10`` .. ``uni_80``. The ``uniformity`` metric is then the average of
     these per-angle standard deviations.
     """
-    S1, S2, A1 = individual
+    # ``individual`` can sometimes contain more than three values. Only the
+    # first three parameters (S1, S2, A1) are relevant for this evaluation.
+    S1, S2, A1 = individual[:3]
 
     weighted_efficiency_total = 0
     weight_sum = 0
