@@ -70,12 +70,19 @@ def compute_regression_score(S1, S2, A1):
         0.004 * S1 * S2 * A1
     )
 
-def evaluate_fitness(folder, individual):
+def evaluate_fitness(folder, individual, return_uniformity=False):
+    """Evaluate fitness from simulation results in *folder* for the given
+    *individual* parameters.
+
+    When ``return_uniformity`` is ``True``, additional uniformity metrics are
+    computed and returned.
+    """
     S1, S2, A1 = individual
 
     weighted_efficiency_total = 0
     weight_sum = 0
     efficiencies_per_angle = []  # 新增儲存各角度效率
+    angle_unis = []
 
     weights = [1, 2, 5, 7, 5, 8.5, 1.5, 2]
 
@@ -89,6 +96,7 @@ def evaluate_fitness(folder, individual):
             total_energy = 0
             upward_energy = 0
 
+            angle_intensities = []
             for line in data_lines:
                 parts = line.strip().split()
                 if len(parts) < 2:
@@ -97,6 +105,7 @@ def evaluate_fitness(folder, individual):
                     polar_angle = float(parts[0])
                     intensity_col1 = float(parts[1])
                     total_energy += intensity_col1
+                    angle_intensities.append(intensity_col1)
                     if polar_angle > 90:
                         upward_energy += intensity_col1
                 except ValueError:
@@ -110,6 +119,14 @@ def evaluate_fitness(folder, individual):
             efficiencies_per_angle.append(eff)
             weighted_efficiency_total += eff * weights[idx]
             weight_sum += weights[idx]
+
+            if return_uniformity:
+                angle_intensities = np.array(angle_intensities)
+                if angle_intensities.mean() > 0:
+                    cv_a = angle_intensities.std() / angle_intensities.mean()
+                else:
+                    cv_a = 1.0
+                angle_unis.append(max(0.0, 1.0 - cv_a))
 
         except Exception as e:
             
@@ -131,6 +148,21 @@ def evaluate_fitness(folder, individual):
     w = 2
     fitness = efficiency * (1 / (1 + w * process_score))
 
-    return fitness, efficiency, process_score, efficiencies_per_angle
-
+    if return_uniformity:
+        uniformity = min(angle_unis) if angle_unis else 0.0
+        return (
+            fitness,
+            efficiency,
+            process_score,
+            uniformity,
+            efficiencies_per_angle,
+            angle_unis,
+        )
+    else:
+        return (
+            fitness,
+            efficiency,
+            process_score,
+            efficiencies_per_angle,
+        )
 
