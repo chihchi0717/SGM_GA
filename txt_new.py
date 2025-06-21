@@ -70,7 +70,12 @@ def compute_regression_score(S1, S2, A1):
         0.004 * S1 * S2 * A1
     )
 
-def evaluate_fitness(folder, individual, return_uniformity=False):
+def evaluate_fitness(
+    folder,
+    individual,
+    return_uniformity: bool = False,
+    process_weight: float = 2,
+):
     """Evaluate fitness from simulation results in *folder* for the given
     *individual* parameters.
 
@@ -145,8 +150,7 @@ def evaluate_fitness(folder, individual, return_uniformity=False):
         print(f"⚠️ 製程品質評估失敗: {e}")
         process_score = 1.0
     
-    w = 2
-    fitness = efficiency * (1 / (1 + w * process_score))
+    fitness = efficiency * (1 / (1 + process_weight * process_score))
 
     if return_uniformity:
         uniformity = min(angle_unis) if angle_unis else 0.0

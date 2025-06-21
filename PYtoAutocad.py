@@ -183,7 +183,15 @@ class PrismBuilder:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-    def build(self, sid_ang, mode: str, paths: OutputPaths, fillet:int) -> None:
+    def build(
+        self,
+        sid_ang,
+        mode: str,
+        paths: OutputPaths,
+        fillet: int,
+        radius: float | None = None,
+        light_source_length: float = 0.5,
+    ) -> None:
         side_a = round(sid_ang[0], 2)
         side_b = round(sid_ang[1], 2)
         angle_B = sid_ang[2]
@@ -226,7 +234,7 @@ class PrismBuilder:
 
                 
             if fillet == 1:
-                radius = 0.022  # 0.05
+                r = radius if radius is not None else 0.022
                 x = round(Cx * self.scale, 1)
                 y = round(Cy * self.scale, 1)
                 corner_x1 = x + 0.5
@@ -236,7 +244,7 @@ class PrismBuilder:
 
                 send_command_with_retry(
                     self.acad,
-                    f"FILLET\nRadius\n{radius}\nC\n{corner_x1},{corner_y1}\n{corner_x2},{corner_y2}\n",
+                    f"FILLET\nRadius\n{r}\nC\n{corner_x1},{corner_y1}\n{corner_x2},{corner_y2}\n",
                 )
 
                 send_command_with_retry(self.acad, f"-BOUNDARY\n{Ix},{Iy}\n\n")
@@ -258,7 +266,7 @@ class PrismBuilder:
 
 
             if fillet == 2:
-                radius = 0.066  # 0.05
+                r = radius if radius is not None else 0.066
                 x = round(Cx * self.scale, 1)
                 y = round(Cy * self.scale, 1)
                 corner_x1 = x + 0.05
@@ -268,7 +276,7 @@ class PrismBuilder:
 
                 send_command_with_retry(
                     self.acad,
-                    f"FILLET\nRadius\n{radius}\nC\n{corner_x1},{corner_y1}\n{corner_x2},{corner_y2}\n",
+                    f"FILLET\nRadius\n{r}\nC\n{corner_x1},{corner_y1}\n{corner_x2},{corner_y2}\n",
                 )
                 rows, columns = 2, 1
                 row_spacing = side_a * self.scale * (rows - 1)
@@ -294,7 +302,7 @@ class PrismBuilder:
 
                 send_command_with_retry(
                     self.acad,
-                    f"FILLET\nRadius\n{radius}\nC\n{corner_x3},{corner_y3}\n{corner_x4},{corner_y4}\n",
+                    f"FILLET\nRadius\n{r}\nC\n{corner_x3},{corner_y3}\n{corner_x4},{corner_y4}\n",
                 )
                 rows, columns = 30, 1
                 row_spacing = side_a * self.scale * (rows - 1)
@@ -324,7 +332,6 @@ class PrismBuilder:
             raise ValueError("mode must be 'stair' or 'triangle'")
 
 
-        light_source_length = 0.5
         actual_array_top = top + (rows - 1) * (top - bottom)
         array_center_y = (actual_array_top + bottom) / 2
         center_y = round(array_center_y * self.scale, 1)
@@ -368,6 +375,8 @@ def Build_model(
     mode: str = "stair",
     folder: str = ".",
     fillet: int = 1,
+    radius: float | None = None,
+    light_source_length: float = 0.5,
     builder_params: dict | None = None,
 ):
     """Legacy wrapper for building a prism model."""
@@ -382,7 +391,14 @@ def Build_model(
     if builder_params is None:
         builder_params = {"scale": 1.0, "pixel_size": 22, "sleep_time": 0.2}
     builder = PrismBuilder(**builder_params)
-    builder.build(sid_ang, mode=mode, paths=paths, fillet= fillet)
+    builder.build(
+        sid_ang,
+        mode=mode,
+        paths=paths,
+        fillet=fillet,
+        radius=radius,
+        light_source_length=light_source_length,
+    )
     return 1, []
 
 
