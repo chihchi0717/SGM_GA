@@ -25,6 +25,9 @@ POP_SIZE = 3 # μ (親代數量)
 OFFSPRING_SIZE = POP_SIZE  # λ (後代數量)
 N_GENERATIONS = 100  # 總共要執行的世代數
 
+# 是否在評估函式中計算並回傳均勻度
+RETURN_UNIFORMITY = True
+
 # 基因範圍
 SIDE_BOUND = [0.4, 1.5]
 ANGLE_BOUND = [1, 179]
@@ -59,6 +62,7 @@ def write_run_config():
         "TAU_PRIME": TAU_PRIME,
         "TAU": TAU,
         "GLOBAL_SEED": GLOBAL_SEED,
+        "RETURN_UNIFORMITY": RETURN_UNIFORMITY,
         "save_root": save_root,
         "log_dir": log_dir,
     }
@@ -140,9 +144,14 @@ def create_log_row(
     individual, sigma, fitness_data, generation, role, parent_indices, seed=None
 ):
     """建立一筆日誌紀錄的字典物件"""
-    fitness, efficiency, process_score, uniformity, angle_effs, angle_unis = (
-        fitness_data
-    )
+    if len(fitness_data) >= 6:
+        fitness, efficiency, process_score, uniformity, angle_effs, angle_unis = (
+            fitness_data[:6]
+        )
+    else:
+        fitness, efficiency, process_score, angle_effs = fitness_data
+        uniformity = 0.0
+        angle_unis = []
     p_idx1, p_idx2 = parent_indices
     row = {
         "generation": generation,
@@ -214,11 +223,22 @@ def check_if_evaluated(fitness_log, individual):
                 ]
                 angle_unis = []
                 for angle in range(10, 90, 10):
-                    if f"uni_{angle}" in row:
-                        angle_unis.append(float(row.get(f"uni_{angle}", 0.0)))
+                    val = row.get(f"uni_{angle}")
+                    if val not in (None, ""):
+                        try:
+                            angle_unis.append(float(val))
+                            continue
+                        except ValueError:
+                            pass
+                    cv_val = row.get(f"cv_{angle}")
+                    if cv_val not in (None, ""):
+                        try:
+                            cv_a = float(cv_val)
+                        except ValueError:
+                            cv_a = 1.0
                     else:
-                        cv_a = float(row.get(f"cv_{angle}", 1.0))
-                        angle_unis.append(max(0.0, 1.0 - cv_a))
+                        cv_a = 1.0
+                    angle_unis.append(max(0.0, 1.0 - cv_a))
                 return True, (
                     fitness,
                     efficiency,
@@ -254,7 +274,9 @@ def simulate_and_evaluate(folder, individual):
     while True:
         try:
             tracepro_fast(os.path.join(folder, "Sim.scm"))
-            return evaluate_fitness(folder, individual, return_uniformity=True)
+            return evaluate_fitness(
+                folder, individual, return_uniformity=RETURN_UNIFORMITY
+            )
         except Exception as e:
             print(f"⚠️ tracepro/evaluate_fitness(parent {individual}) 失敗: {e}")
             time.sleep(1)
@@ -332,7 +354,9 @@ def main():
             folder = os.path.join(save_root, f"P{i+1}")
             if build_results[i]:
                 print(f"  評估初始模型 P{i+1}...")
-                eval_data = evaluate_fitness(folder, individual, return_uniformity=True)
+                eval_data = evaluate_fitness(
+                    folder, individual, return_uniformity=RETURN_UNIFORMITY
+                )
             else:
                 eval_data = (-999, 0, 0, 0.0, [], [0.0] * 8)  # 給予失敗個體極差的適應度
 
@@ -394,11 +418,22 @@ def main():
                 ]
                 angle_unis = []
                 for angle in range(10, 90, 10):
-                    if f"uni_{angle}" in row:
-                        angle_unis.append(float(row.get(f"uni_{angle}", 0.0)))
+                    val = row.get(f"uni_{angle}")
+                    if val not in (None, ""):
+                        try:
+                            angle_unis.append(float(val))
+                            continue
+                        except ValueError:
+                            pass
+                    cv_val = row.get(f"cv_{angle}")
+                    if cv_val not in (None, ""):
+                        try:
+                            cv_a = float(cv_val)
+                        except ValueError:
+                            cv_a = 1.0
                     else:
-                        cv_a = float(row.get(f"cv_{angle}", 1.0))
-                        angle_unis.append(max(0.0, 1.0 - cv_a))
+                        cv_a = 1.0
+                    angle_unis.append(max(0.0, 1.0 - cv_a))
                 parent_eval_data.append(
                     (
                         fitness,
@@ -508,7 +543,9 @@ def main():
                 folder = os.path.join(save_root, f"P{i+1}")
                 print(f"  評估子代模型 P{i+1}...")
                 eval_data = evaluate_fitness(
-                    folder, children_genes[i], return_uniformity=False
+                    folder,
+                    children_genes[i],
+                    return_uniformity=RETURN_UNIFORMITY,
                 )
                 offspring_eval_data[i] = eval_data
                 log_row = create_log_row(
