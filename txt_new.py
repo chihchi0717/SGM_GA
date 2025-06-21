@@ -70,12 +70,46 @@ def compute_regression_score(S1, S2, A1):
         0.004 * S1 * S2 * A1
     )
 
-def evaluate_fitness(folder, individual):
+def evaluate_fitness(folder, individual, return_uniformity=False):
+    """Evaluate fitness of an individual based on simulation results.
+
+    Parameters
+    ----------
+    folder : str
+        The folder containing ``polar-*.txt`` simulation output files.
+    individual : sequence
+        The ``(S1, S2, A1)`` parameters for regression scoring.
+    return_uniformity : bool, optional
+        If ``True`` the returned tuple will additionally contain overall
+        uniformity and per-angle uniformities.  When ``False`` only the
+        efficiency related metrics are returned for backward compatibility.
+
+    Returns
+    -------
+    tuple
+        When ``return_uniformity`` is ``False`` the return value is::
+
+            (fitness, efficiency, process_score, efficiencies_per_angle)
+
+        When ``True`` the return value becomes::
+
+            (
+                fitness,
+                efficiency,
+                process_score,
+                uniformity,
+                efficiencies_per_angle,
+                uniformities_per_angle,
+            )
+    """
+
     S1, S2, A1 = individual
 
     weighted_efficiency_total = 0
     weight_sum = 0
-    efficiencies_per_angle = []  # 新增儲存各角度效率
+    efficiencies_per_angle = []  # 儲存各角度效率
+    intensities_all = []         # 儲存所有角度亮度資料
+    uniformities_per_angle = []  # 儲存各角度均勻度
 
     weights = [1, 2, 5, 7, 5, 8.5, 1.5, 2]
 
@@ -88,6 +122,7 @@ def evaluate_fitness(folder, individual):
             data_lines = lines[6:]
             total_energy = 0
             upward_energy = 0
+            angle_intensities = []
 
             for line in data_lines:
                 parts = line.strip().split()
@@ -97,6 +132,7 @@ def evaluate_fitness(folder, individual):
                     polar_angle = float(parts[0])
                     intensity_col1 = float(parts[1])
                     total_energy += intensity_col1
+                    angle_intensities.append(intensity_col1)
                     if polar_angle > 90:
                         upward_energy += intensity_col1
                 except ValueError:
@@ -110,6 +146,12 @@ def evaluate_fitness(folder, individual):
             efficiencies_per_angle.append(eff)
             weighted_efficiency_total += eff * weights[idx]
             weight_sum += weights[idx]
+
+            if return_uniformity and angle_intensities:
+                intensities_all.append(angle_intensities)
+                uniformities_per_angle.append(
+                    uniformity(np.array(angle_intensities))
+                )
 
         except Exception as e:
             
@@ -131,6 +173,21 @@ def evaluate_fitness(folder, individual):
     w = 2
     fitness = efficiency * (1 / (1 + w * process_score))
 
-    return fitness, efficiency, process_score, efficiencies_per_angle
+    if return_uniformity:
+        if intensities_all:
+            all_vals = np.concatenate(intensities_all)
+            overall_uni = uniformity(all_vals)
+        else:
+            overall_uni = 0.0
+        return (
+            fitness,
+            efficiency,
+            process_score,
+            overall_uni,
+            efficiencies_per_angle,
+            uniformities_per_angle,
+        )
+    else:
+        return fitness, efficiency, process_score, efficiencies_per_angle
 
 
