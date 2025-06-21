@@ -139,10 +139,40 @@ def save_generation_log(generation_data, file_path):
 def create_log_row(
     individual, sigma, fitness_data, generation, role, parent_indices, seed=None
 ):
-    """建立一筆日誌紀錄的字典物件"""
-    fitness, efficiency, process_score, uniformity, angle_effs, angle_unis = (
-        fitness_data
-    )
+    """建立一筆日誌紀錄的字典物件
+
+    Parameters
+    ----------
+    individual : sequence
+        基因組 `(S1, S2, A1)`。
+    sigma : sequence
+        對應突變標準差。
+    fitness_data : tuple
+        可能是 ``(fitness, efficiency, process_score, angle_effs)`` 或
+        ``(fitness, efficiency, process_score, uniformity, angle_effs,
+        angle_unis)`` 兩種形式。
+    generation : int
+        目前世代編號。
+    role : str
+        ``"parent"``、``"offspring"`` 等角色。
+    parent_indices : tuple
+        親代索引。
+    seed : int, optional
+        隨機種子。
+
+    Returns
+    -------
+    dict
+        一筆可寫入 CSV 的日誌紀錄。
+    """
+    if len(fitness_data) == 6:
+        fitness, efficiency, process_score, uniformity, angle_effs, angle_unis = fitness_data
+    elif len(fitness_data) == 4:
+        fitness, efficiency, process_score, angle_effs = fitness_data
+        uniformity = 0.0
+        angle_unis = []
+    else:
+        raise ValueError("fitness_data 必須包含 4 或 6 個欄位")
     p_idx1, p_idx2 = parent_indices
     row = {
         "generation": generation,
