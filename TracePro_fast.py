@@ -1,4 +1,5 @@
 from pywinauto import application, findwindows
+from pywinauto.timings import TimeoutError
 import time, os
 
 import warnings
@@ -25,7 +26,18 @@ def wait_file(path, timeout=60):
     return True
 
 
-def load_macro(app, path_macro):
+def safe_click(ctrl, max_attempts: int = 3, delay: float = 0.5):
+    """Click a control, retrying with ``click_input`` as fallback."""
+    for _ in range(max_attempts):
+        try:
+            ctrl.click()
+            return
+        except Exception:
+            time.sleep(delay)
+    ctrl.click_input()
+
+
+def load_macro(app, path_macro, max_attempts: int = 3):
     afxc = app["Afx:400000:8:10003:0:bf0aa1"].wait("ready")
     # afxc.menu_item(u'&Window->&1 Model:[initiate.OML]').select()
     afxc.menu_select("&Window->&1 Model:[initiate.OML]")
@@ -34,7 +46,18 @@ def load_macro(app, path_macro):
     w_handle = findwindows.find_windows(title="Select macro file to Load/Execute")[0]
     macro_win = app.window(handle=w_handle)
     macro_win["檔案名稱(&N):Edit"].set_edit_text(path_macro)
-    macro_win["開啟(&O)Button"].click()
+
+    for _ in range(max_attempts):
+        macro_win["開啟(&O)Button"].click()
+        try:
+            macro_win.wait_not("visible", timeout=2)
+            break
+        except TimeoutError:
+            time.sleep(0.5)
+    else:
+        # last attempt with click_input in case normal click failed
+        macro_win["開啟(&O)Button"].click_input()
+        macro_win.wait_not("visible", timeout=2)
 
 
 def tracepro_fast(path_macro, timeout=60, exe_path=None):
@@ -75,7 +98,7 @@ def tracepro_fast(path_macro, timeout=60, exe_path=None):
         print("⏰ 模擬超時，執行 Reset.scm 並重試")
         load_macro(app, reset_path)
         time.sleep(5)
-        win["開啟(&O)Button"].click()
+        safe_click(win["開啟(&O)Button"])
         # 清掉重試前可能殘留的 signal
         # if os.path.exists(signal):
         #     os.remove(signal)
