@@ -183,7 +183,7 @@ class PrismBuilder:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-    def build(self, sid_ang, mode: str, paths: OutputPaths, fillet = 0) -> None:
+    def build(self, sid_ang, mode: str, paths: OutputPaths, fillet:int) -> None:
         side_a = round(sid_ang[0], 2)
         side_b = round(sid_ang[1], 2)
         angle_B = sid_ang[2]
@@ -206,9 +206,14 @@ class PrismBuilder:
                 f"_.ZOOM\nE\n\n",
             )
             if fillet == 0:
+                send_command_with_retry(self.acad, f"-BOUNDARY\n{Ix},{Iy}\n\n")
+                send_command_with_retry(self.acad, "_EXTRUDE\nL\n\n1\n")
+                send_command_with_retry(self.acad, "UNION\nALL\n\n")
+                
                 rows, columns = 30, 1
                 row_spacing = side_a * self.scale * (rows - 1)
                 column_spacing = 1
+
                 send_command_with_retry(
                     self.acad,
                     f"ARRAY\nALL\n\nR\nCOL\n{columns}\nT\n{column_spacing}\nR\n{rows}\nT\n{row_spacing}\n0\nX\n",
@@ -217,8 +222,11 @@ class PrismBuilder:
                 send_command_with_retry(self.acad, "Explode\nALL\n\n")
                 send_command_with_retry(self.acad, "ZOOM\nE\n")
 
+                send_command_with_retry(self.acad, "UNION\nALL\n\n")
+
+                
             if fillet == 1:
-                radius = 0.066  # 0.05
+                radius = 0.022  # 0.05
                 x = round(Cx * self.scale, 1)
                 y = round(Cy * self.scale, 1)
                 corner_x1 = x + 0.5
@@ -230,6 +238,11 @@ class PrismBuilder:
                     self.acad,
                     f"FILLET\nRadius\n{radius}\nC\n{corner_x1},{corner_y1}\n{corner_x2},{corner_y2}\n",
                 )
+
+                send_command_with_retry(self.acad, f"-BOUNDARY\n{Ix},{Iy}\n\n")
+                send_command_with_retry(self.acad, "_EXTRUDE\nL\n\n1\n")
+                send_command_with_retry(self.acad, "UNION\nALL\n\n")
+
                 rows, columns = 30, 1
                 row_spacing = side_a * self.scale * (rows - 1)
                 column_spacing = 1
@@ -241,14 +254,17 @@ class PrismBuilder:
                 send_command_with_retry(self.acad, "Explode\nALL\n\n")
                 send_command_with_retry(self.acad, "ZOOM\nE\n")
 
+                send_command_with_retry(self.acad, "UNION\nALL\n\n")
+
+
             if fillet == 2:
                 radius = 0.066  # 0.05
                 x = round(Cx * self.scale, 1)
                 y = round(Cy * self.scale, 1)
-                corner_x1 = x + 0.5
-                corner_y1 = y - 0.5
-                corner_x2 = x - 0.5
-                corner_y2 = y + 0.5
+                corner_x1 = x + 0.05
+                corner_y1 = y - 0.05
+                corner_x2 = x - 0.05
+                corner_y2 = y + 0.05
 
                 send_command_with_retry(
                     self.acad,
@@ -336,7 +352,7 @@ class PrismBuilder:
             time.sleep(1)
 
         if os.path.exists(paths.sat_path) and os.path.exists(paths.dwg_path):
-            # send_command_with_retry(self.acad, "close\n")
+            send_command_with_retry(self.acad, "close\n")
             time.sleep(2)
         else:
             print(f"❌ 最終仍未成功產生檔案：{paths.sat_path} 或 {paths.dwg_path}。")
@@ -347,7 +363,7 @@ class PrismBuilder:
 # ---------------------------------------------------------------------------
 
 
-def Build_model(sid_ang, mode: str = "stair", folder: str = "."):
+def Build_model(sid_ang, mode: str = "stair", folder: str = ".", fillet: int = 1):
     """Legacy wrapper for building a prism model."""
     sid_ang = [round(sid_ang[0], 2), round(sid_ang[1], 2), sid_ang[2]]
     paths = OutputPaths(folder)
@@ -358,7 +374,7 @@ def Build_model(sid_ang, mode: str = "stair", folder: str = "."):
             except Exception as e:  # pragma: no cover - file system access
                 print(f"⚠️ 無法刪除舊檔案 {p}: {e}")
     builder = PrismBuilder(scale=1)
-    builder.build(sid_ang, mode=mode, paths=paths, fillet=1)
+    builder.build(sid_ang, mode=mode, paths=paths, fillet= fillet)
     return 1, []
 
 
@@ -366,10 +382,10 @@ def Build_model(sid_ang, mode: str = "stair", folder: str = "."):
 # Script entry point
 # ---------------------------------------------------------------------------
 
-if __name__ == "__main__":
-    sid_ang = [0.46, 0.9, 81]
-    Build_model(
-        sid_ang,
-        mode="triangle",
-        folder=r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202506\0620",
-    )
+# if __name__ == "__main__":
+#     sid_ang = [0.46, 0.9, 81]
+#     Build_model(
+#         sid_ang,
+#         mode="triangle",
+#         folder=r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202506\0620",
+#     )

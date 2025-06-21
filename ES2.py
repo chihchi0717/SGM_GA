@@ -21,7 +21,7 @@ import smtplib
 from email.message import EmailMessage
 
 # === ES 參數設定 ===
-POP_SIZE = 10  # μ (親代數量)
+POP_SIZE = 3 # μ (親代數量)
 OFFSPRING_SIZE = POP_SIZE  # λ (後代數量)
 N_GENERATIONS = 100  # 總共要執行的世代數
 
@@ -43,7 +43,7 @@ np.random.seed(GLOBAL_SEED)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 save_root = os.path.join(BASE_DIR, "GA_population")
 # 【保留您的變數】使用 log_dir 作為日誌的根目錄
-log_dir = r"C:\Users\cchih\OneDrive - NTHU\msi"
+log_dir = r"C:\Users\User\OneDrive - NTHU\nuc"
 os.makedirs(save_root, exist_ok=True)
 os.makedirs(log_dir, exist_ok=True)
 
@@ -237,7 +237,7 @@ def build_model_with_retry(individual, folder, mode="triangle", max_attempts=3):
     attempt = 0
     while attempt < max_attempts:
         try:
-            result, log = Build_model(individual, mode=mode, folder=folder)
+            result, log = Build_model(individual, mode=mode, folder=folder, fillet = 1)
             for msg in log:
                 print(msg)
             if result == 1:
@@ -508,7 +508,7 @@ def main():
                 folder = os.path.join(save_root, f"P{i+1}")
                 print(f"  評估子代模型 P{i+1}...")
                 eval_data = evaluate_fitness(
-                    folder, children_genes[i], return_uniformity=True
+                    folder, children_genes[i], return_uniformity=False
                 )
                 offspring_eval_data[i] = eval_data
                 log_row = create_log_row(
