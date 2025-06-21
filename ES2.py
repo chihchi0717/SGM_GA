@@ -144,9 +144,14 @@ def create_log_row(
     individual, sigma, fitness_data, generation, role, parent_indices, seed=None
 ):
     """建立一筆日誌紀錄的字典物件"""
-    fitness, efficiency, process_score, uniformity, angle_effs, angle_unis = (
-        fitness_data
-    )
+    if len(fitness_data) == 6:
+        fitness, efficiency, process_score, uniformity, angle_effs, angle_unis = (
+            fitness_data
+        )
+    else:
+        fitness, efficiency, process_score, angle_effs = fitness_data
+        uniformity = 0.0
+        angle_unis = []
     p_idx1, p_idx2 = parent_indices
     row = {
         "generation": generation,
@@ -218,11 +223,22 @@ def check_if_evaluated(fitness_log, individual):
                 ]
                 angle_unis = []
                 for angle in range(10, 90, 10):
-                    if f"uni_{angle}" in row:
-                        angle_unis.append(float(row.get(f"uni_{angle}", 0.0)))
+                    val = row.get(f"uni_{angle}")
+                    if val not in (None, ""):
+                        try:
+                            angle_unis.append(float(val))
+                            continue
+                        except ValueError:
+                            pass
+                    cv_val = row.get(f"cv_{angle}")
+                    if cv_val not in (None, ""):
+                        try:
+                            cv_a = float(cv_val)
+                        except ValueError:
+                            cv_a = 1.0
                     else:
-                        cv_a = float(row.get(f"cv_{angle}", 1.0))
-                        angle_unis.append(max(0.0, 1.0 - cv_a))
+                        cv_a = 1.0
+                    angle_unis.append(max(0.0, 1.0 - cv_a))
                 return True, (
                     fitness,
                     efficiency,
@@ -402,11 +418,22 @@ def main():
                 ]
                 angle_unis = []
                 for angle in range(10, 90, 10):
-                    if f"uni_{angle}" in row:
-                        angle_unis.append(float(row.get(f"uni_{angle}", 0.0)))
+                    val = row.get(f"uni_{angle}")
+                    if val not in (None, ""):
+                        try:
+                            angle_unis.append(float(val))
+                            continue
+                        except ValueError:
+                            pass
+                    cv_val = row.get(f"cv_{angle}")
+                    if cv_val not in (None, ""):
+                        try:
+                            cv_a = float(cv_val)
+                        except ValueError:
+                            cv_a = 1.0
                     else:
-                        cv_a = float(row.get(f"cv_{angle}", 1.0))
-                        angle_unis.append(max(0.0, 1.0 - cv_a))
+                        cv_a = 1.0
+                    angle_unis.append(max(0.0, 1.0 - cv_a))
                 parent_eval_data.append(
                     (
                         fitness,
