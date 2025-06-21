@@ -508,7 +508,7 @@ def main():
                 folder = os.path.join(save_root, f"P{i+1}")
                 print(f"  評估子代模型 P{i+1}...")
                 eval_data = evaluate_fitness(
-                    folder, children_genes[i], return_uniformity=False
+                    folder, children_genes[i], return_uniformity=True
                 )
                 offspring_eval_data[i] = eval_data
                 log_row = create_log_row(
