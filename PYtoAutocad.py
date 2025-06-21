@@ -363,7 +363,13 @@ class PrismBuilder:
 # ---------------------------------------------------------------------------
 
 
-def Build_model(sid_ang, mode: str = "stair", folder: str = ".", fillet: int = 1):
+def Build_model(
+    sid_ang,
+    mode: str = "stair",
+    folder: str = ".",
+    fillet: int = 1,
+    builder_params: dict | None = None,
+):
     """Legacy wrapper for building a prism model."""
     sid_ang = [round(sid_ang[0], 2), round(sid_ang[1], 2), sid_ang[2]]
     paths = OutputPaths(folder)
@@ -373,7 +379,9 @@ def Build_model(sid_ang, mode: str = "stair", folder: str = ".", fillet: int = 1
                 os.remove(p)
             except Exception as e:  # pragma: no cover - file system access
                 print(f"⚠️ 無法刪除舊檔案 {p}: {e}")
-    builder = PrismBuilder(scale=1)
+    if builder_params is None:
+        builder_params = {"scale": 1.0, "pixel_size": 22, "sleep_time": 0.2}
+    builder = PrismBuilder(**builder_params)
     builder.build(sid_ang, mode=mode, paths=paths, fillet= fillet)
     return 1, []
 

@@ -37,18 +37,16 @@ def load_macro(app, path_macro):
     macro_win["開啟(&O)Button"].click()
 
 
-def tracepro_fast(path_macro, timeout=60):
+def tracepro_fast(path_macro, timeout=60, exe_path=None):
 
     if os.path.exists(signal):
         os.remove(signal)
 
-    # TRACEPRO_EXE = os.environ.get("TRACEPRO_PATH",
-    #     r"C:\Program Files (x86)\Lambda Research Corporation\TracePro\TracePro.exe"
-    # )
-    # app = application.Application().connect(path=TRACEPRO_EXE)
-    app = application.Application().connect(
-        path=r"C:\Program Files (x86)\Lambda Research Corporation\TracePro\TracePro.exe"
-    )
+    if exe_path is None:
+        exe_path = (
+            r"C:\Program Files (x86)\Lambda Research Corporation\TracePro\TracePro.exe"
+        )
+    app = application.Application().connect(path=exe_path)
     win = app.window(title_re=".*TracePro.*")
     win.wait("ready")
     time.sleep(0.1)

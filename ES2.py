@@ -39,6 +39,18 @@ GLOBAL_SEED = 12
 random.seed(GLOBAL_SEED)
 np.random.seed(GLOBAL_SEED)
 
+# === 子功能參數設定 ===
+BUILD_MODEL_PARAMS = {
+    "mode": "triangle",
+    "fillet": 1,
+    "builder_options": {"scale": 1.0, "pixel_size": 22, "sleep_time": 0.2},
+    "max_attempts": 3,
+}
+TRACEPRO_EXE = (
+    r"C:\\Program Files (x86)\\Lambda Research Corporation\\TracePro\\TracePro.exe"
+)
+EVAL_PARAMS = {"weights": [1, 2, 5, 7, 5, 8.5, 1.5, 2], "process_weight": 2}
+
 # --- 路徑設定 ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 save_root = os.path.join(BASE_DIR, "GA_population")
@@ -139,10 +151,40 @@ def save_generation_log(generation_data, file_path):
 def create_log_row(
     individual, sigma, fitness_data, generation, role, parent_indices, seed=None
 ):
-    """建立一筆日誌紀錄的字典物件"""
-    fitness, efficiency, process_score, uniformity, angle_effs, angle_unis = (
-        fitness_data
-    )
+    """建立一筆日誌紀錄的字典物件
+
+    Parameters
+    ----------
+    individual : sequence
+        基因組 `(S1, S2, A1)`。
+    sigma : sequence
+        對應突變標準差。
+    fitness_data : tuple
+        可能是 ``(fitness, efficiency, process_score, angle_effs)`` 或
+        ``(fitness, efficiency, process_score, uniformity, angle_effs,
+        angle_unis)`` 兩種形式。
+    generation : int
+        目前世代編號。
+    role : str
+        ``"parent"``、``"offspring"`` 等角色。
+    parent_indices : tuple
+        親代索引。
+    seed : int, optional
+        隨機種子。
+
+    Returns
+    -------
+    dict
+        一筆可寫入 CSV 的日誌紀錄。
+    """
+    if len(fitness_data) == 6:
+        fitness, efficiency, process_score, uniformity, angle_effs, angle_unis = fitness_data
+    elif len(fitness_data) == 4:
+        fitness, efficiency, process_score, angle_effs = fitness_data
+        uniformity = 0.0
+        angle_unis = []
+    else:
+        raise ValueError("fitness_data 必須包含 4 或 6 個欄位")
     p_idx1, p_idx2 = parent_indices
     row = {
         "generation": generation,
@@ -232,12 +274,23 @@ def check_if_evaluated(fitness_log, individual):
     return False, None
 
 
-def build_model_with_retry(individual, folder, mode="triangle", max_attempts=3):
+def build_model_with_retry(
+    individual,
+    folder,
+    mode=BUILD_MODEL_PARAMS["mode"],
+    max_attempts=BUILD_MODEL_PARAMS["max_attempts"],
+):
     """Build a model with retries to handle transient AutoCAD errors."""
     attempt = 0
     while attempt < max_attempts:
         try:
-            result, log = Build_model(individual, mode=mode, folder=folder, fillet = 1)
+            result, log = Build_model(
+                individual,
+                mode=mode,
+                folder=folder,
+                fillet=BUILD_MODEL_PARAMS["fillet"],
+                builder_params=BUILD_MODEL_PARAMS["builder_options"],
+            )
             for msg in log:
                 print(msg)
             if result == 1:
@@ -253,8 +306,14 @@ def simulate_and_evaluate(folder, individual):
     """Run TracePro simulation and evaluate fitness."""
     while True:
         try:
-            tracepro_fast(os.path.join(folder, "Sim.scm"))
-            return evaluate_fitness(folder, individual, return_uniformity=True)
+            tracepro_fast(os.path.join(folder, "Sim.scm"), exe_path=TRACEPRO_EXE)
+            return evaluate_fitness(
+                folder,
+                individual,
+                return_uniformity=True,
+                weights=EVAL_PARAMS["weights"],
+                process_weight=EVAL_PARAMS["process_weight"],
+            )
         except Exception as e:
             print(f"⚠️ tracepro/evaluate_fitness(parent {individual}) 失敗: {e}")
             time.sleep(1)
@@ -332,7 +391,13 @@ def main():
             folder = os.path.join(save_root, f"P{i+1}")
             if build_results[i]:
                 print(f"  評估初始模型 P{i+1}...")
-                eval_data = evaluate_fitness(folder, individual, return_uniformity=True)
+                eval_data = evaluate_fitness(
+                    folder,
+                    individual,
+                    return_uniformity=True,
+                    weights=EVAL_PARAMS["weights"],
+                    process_weight=EVAL_PARAMS["process_weight"],
+                )
             else:
                 eval_data = (-999, 0, 0, 0.0, [], [0.0] * 8)  # 給予失敗個體極差的適應度
 
@@ -508,7 +573,11 @@ def main():
                 folder = os.path.join(save_root, f"P{i+1}")
                 print(f"  評估子代模型 P{i+1}...")
                 eval_data = evaluate_fitness(
-                    folder, children_genes[i], return_uniformity=False
+                    folder,
+                    children_genes[i],
+                    return_uniformity=True,
+                    weights=EVAL_PARAMS["weights"],
+                    process_weight=EVAL_PARAMS["process_weight"],
                 )
                 offspring_eval_data[i] = eval_data
                 log_row = create_log_row(
