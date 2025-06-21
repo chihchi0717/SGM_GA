@@ -25,8 +25,15 @@ POP_SIZE = 3 # μ (親代數量)
 OFFSPRING_SIZE = POP_SIZE  # λ (後代數量)
 N_GENERATIONS = 100  # 總共要執行的世代數
 
-# 是否在評估函式中計算並回傳均勻度
+# --- AutoCAD 建模參數 ---
+BUILD_MODE = "triangle"
+BUILD_FILLET = 2
+BUILD_RADIUS = 0.022
+LIGHT_SOURCE_SIZE = 0.5
+
+# --- Fitness 評估參數 ---
 RETURN_UNIFORMITY = False
+PROCESS_WEIGHT = 2
 
 # 基因範圍
 SIDE_BOUND = [0.4, 1.5]
@@ -57,12 +64,17 @@ def write_run_config():
         "POP_SIZE": POP_SIZE,
         "OFFSPRING_SIZE": OFFSPRING_SIZE,
         "N_GENERATIONS": N_GENERATIONS,
+        "BUILD_MODE": BUILD_MODE,
+        "BUILD_FILLET": BUILD_FILLET,
+        "BUILD_RADIUS": BUILD_RADIUS,
+        "LIGHT_SOURCE_SIZE": LIGHT_SOURCE_SIZE,
         "SIDE_BOUND": SIDE_BOUND,
         "ANGLE_BOUND": ANGLE_BOUND,
         "TAU_PRIME": TAU_PRIME,
         "TAU": TAU,
         "GLOBAL_SEED": GLOBAL_SEED,
         "RETURN_UNIFORMITY": RETURN_UNIFORMITY,
+        "PROCESS_WEIGHT": PROCESS_WEIGHT,
         "save_root": save_root,
         "log_dir": log_dir,
     }
@@ -252,12 +264,19 @@ def check_if_evaluated(fitness_log, individual):
     return False, None
 
 
-def build_model_with_retry(individual, folder, mode="triangle", max_attempts=3):
+def build_model_with_retry(individual, folder, max_attempts=3):
     """Build a model with retries to handle transient AutoCAD errors."""
     attempt = 0
     while attempt < max_attempts:
         try:
-            result, log = Build_model(individual, mode=mode, folder=folder, fillet = 1)
+            result, log = Build_model(
+                individual,
+                mode=BUILD_MODE,
+                folder=folder,
+                fillet=BUILD_FILLET,
+                radius=BUILD_RADIUS,
+                light_source_length=LIGHT_SOURCE_SIZE,
+            )
             for msg in log:
                 print(msg)
             if result == 1:
@@ -275,7 +294,10 @@ def simulate_and_evaluate(folder, individual):
         try:
             tracepro_fast(os.path.join(folder, "Sim.scm"))
             return evaluate_fitness(
-                folder, individual, return_uniformity=RETURN_UNIFORMITY
+                folder,
+                individual,
+                return_uniformity=RETURN_UNIFORMITY,
+                process_weight=PROCESS_WEIGHT,
             )
         except Exception as e:
             print(f"⚠️ tracepro/evaluate_fitness(parent {individual}) 失敗: {e}")
@@ -334,9 +356,7 @@ def main():
             folder = os.path.join(save_root, f"P{i+1}")
             os.makedirs(folder, exist_ok=True)
             print(f"  建立初始模型 P{i+1}...")
-            build_results[i] = build_model_with_retry(
-                individual, folder, mode="triangle"
-            )
+            build_results[i] = build_model_with_retry(individual, folder)
             if not build_results[i]:
                 print(f"❌ 建立模型 P{i+1} 最終失敗。")
 
@@ -355,7 +375,10 @@ def main():
             if build_results[i]:
                 print(f"  評估初始模型 P{i+1}...")
                 eval_data = evaluate_fitness(
-                    folder, individual, return_uniformity=RETURN_UNIFORMITY
+                    folder,
+                    individual,
+                    return_uniformity=RETURN_UNIFORMITY,
+                    process_weight=PROCESS_WEIGHT,
                 )
             else:
                 eval_data = (-999, 0, 0, 0.0, [], [0.0] * 8)  # 給予失敗個體極差的適應度
@@ -526,7 +549,7 @@ def main():
                 folder = os.path.join(save_root, f"P{i+1}")
                 os.makedirs(folder, exist_ok=True)
                 print(f"  建立子代模型 P{i+1}...")
-                build_model_with_retry(children_genes[i], folder, mode="triangle")
+                build_model_with_retry(children_genes[i], folder)
 
             print(
                 f"\n--- 步驟 3/4：執行 {len(needs_processing_indices)} 次新子代模擬 ---"
@@ -546,6 +569,7 @@ def main():
                     folder,
                     children_genes[i],
                     return_uniformity=RETURN_UNIFORMITY,
+                    process_weight=PROCESS_WEIGHT,
                 )
                 offspring_eval_data[i] = eval_data
                 log_row = create_log_row(
