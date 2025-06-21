@@ -70,7 +70,13 @@ def compute_regression_score(S1, S2, A1):
         0.004 * S1 * S2 * A1
     )
 
-def evaluate_fitness(folder, individual, return_uniformity=False):
+def evaluate_fitness(
+    folder,
+    individual,
+    return_uniformity=False,
+    weights=None,
+    process_weight=2,
+):
     """Evaluate fitness of an individual based on simulation results.
 
     Parameters
@@ -111,7 +117,8 @@ def evaluate_fitness(folder, individual, return_uniformity=False):
     intensities_all = []         # 儲存所有角度亮度資料
     uniformities_per_angle = []  # 儲存各角度均勻度
 
-    weights = [1, 2, 5, 7, 5, 8.5, 1.5, 2]
+    if weights is None:
+        weights = [1, 2, 5, 7, 5, 8.5, 1.5, 2]
 
     for idx, angle in enumerate(range(10, 90, 10)):
         txt_path = os.path.join(folder, f"polar-{angle}.txt")
@@ -170,8 +177,7 @@ def evaluate_fitness(folder, individual, return_uniformity=False):
         print(f"⚠️ 製程品質評估失敗: {e}")
         process_score = 1.0
     
-    w = 2
-    fitness = efficiency * (1 / (1 + w * process_score))
+    fitness = efficiency * (1 / (1 + process_weight * process_score))
 
     if return_uniformity:
         if intensities_all:
