@@ -33,9 +33,9 @@ LIGHT_SOURCE_SIZE = 0.5
 
 # --- Fitness 評估參數 ---
 RETURN_UNIFORMITY = True
-EFF_WEIGHT = 0.7
-PROCESS_WEIGHT = 0.2
-UNI_WEIGHT = 0.1
+EFF_WEIGHT = 1
+PROCESS_WEIGHT = 1
+UNI_WEIGHT = 1
 
 # 基因範圍
 SIDE_BOUND = [0.4, 1.6]
@@ -523,7 +523,7 @@ def main():
             )
             new_sigma *= SIGMA_SCALE
             new_sigma = np.maximum(new_sigma, 0.05)
-            
+
             if random.random() < 0.6:
                 new_sigma = np.array([0.2, 0.2, 5.0])
             child_gene = clamp_gene(parent_gene + new_sigma * np.random.randn(n))

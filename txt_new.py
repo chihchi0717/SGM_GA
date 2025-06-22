@@ -100,7 +100,7 @@ def evaluate_fitness(
     weighted_efficiency_total = 0
     weight_sum = 0
     efficiencies_per_angle = []  # store efficiency for each measurement angle
-    upward_stds = []  # store upward energy standard deviation per angle when requested
+    upward_uni = []  # store upward energy standard deviation per angle when requested
 
     weights = [1, 2, 5, 7, 5, 8.5, 1.5, 2]
 
@@ -142,7 +142,11 @@ def evaluate_fitness(
             weight_sum += weights[idx]
 
             if return_uniformity:
-                upward_stds.append(np.std(upward_values) if upward_values else 1.0)
+                upward_uni.append(
+                    np.mean(upward_values) * (1 / np.std(upward_values))
+                    if upward_values
+                    else 0.0
+                )
 
         except Exception as e:
 
@@ -162,16 +166,14 @@ def evaluate_fitness(
         process_score = 1.0
 
     if return_uniformity:
-        uniformity = float(np.mean(upward_stds)) if upward_stds else 0.0
-        uniformity_factor = 1 / (uniformity)
+        uniformity = float(np.mean(upward_uni)) if upward_uni else 0.0
+
     else:
         uniformity = 0.0
-        uniformity_factor = 1.0
 
     fitness = (
-        eff_weight * efficiency
-        + (1 / (process_weight * process_score))
-        + uni_weight * uniformity_factor
+        eff_weight * efficiency * (1 / (process_weight * process_score))
+        + uni_weight * uniformity
     )
 
     if return_uniformity:
@@ -181,7 +183,7 @@ def evaluate_fitness(
             process_score,
             uniformity,
             efficiencies_per_angle,
-            upward_stds,
+            upward_uni,
         )
     else:
         return (
