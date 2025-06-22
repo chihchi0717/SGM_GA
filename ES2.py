@@ -21,22 +21,24 @@ import smtplib
 from email.message import EmailMessage
 
 # === ES 參數設定 ===
-POP_SIZE = 3 # μ (親代數量)
+POP_SIZE = 3  # μ (親代數量)
 OFFSPRING_SIZE = POP_SIZE  # λ (後代數量)
 N_GENERATIONS = 100  # 總共要執行的世代數
 
 # --- AutoCAD 建模參數 ---
 BUILD_MODE = "triangle"
-BUILD_FILLET = 2
+BUILD_FILLET = 1
 BUILD_RADIUS = 0.022
 LIGHT_SOURCE_SIZE = 0.5
 
 # --- Fitness 評估參數 ---
-RETURN_UNIFORMITY = False
-PROCESS_WEIGHT = 2
+RETURN_UNIFORMITY = True
+EFF_WEIGHT = 0.7
+PROCESS_WEIGHT = 0.2
+UNI_WEIGHT = 0.1
 
 # 基因範圍
-SIDE_BOUND = [0.4, 1.5]
+SIDE_BOUND = [0.4, 1.6]
 ANGLE_BOUND = [1, 179]
 
 # ES 自適應突變學習率 (n=3)
@@ -53,7 +55,7 @@ np.random.seed(GLOBAL_SEED)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 save_root = os.path.join(BASE_DIR, "GA_population")
 # 【保留您的變數】使用 log_dir 作為日誌的根目錄
-log_dir = r"C:\Users\User\OneDrive - NTHU\nuc"
+log_dir = r"C:\Users\cchih\OneDrive - NTHU\msi"
 os.makedirs(save_root, exist_ok=True)
 os.makedirs(log_dir, exist_ok=True)
 
@@ -74,7 +76,9 @@ def write_run_config():
         "TAU": TAU,
         "GLOBAL_SEED": GLOBAL_SEED,
         "RETURN_UNIFORMITY": RETURN_UNIFORMITY,
+        "EFF_WEIGHT": EFF_WEIGHT,
         "PROCESS_WEIGHT": PROCESS_WEIGHT,
+        "UNI_WEIGHT": UNI_WEIGHT,
         "save_root": save_root,
         "log_dir": log_dir,
     }
@@ -297,7 +301,9 @@ def simulate_and_evaluate(folder, individual):
                 folder,
                 individual,
                 return_uniformity=RETURN_UNIFORMITY,
+                eff_weight=EFF_WEIGHT,
                 process_weight=PROCESS_WEIGHT,
+                uni_weight=UNI_WEIGHT,
             )
         except Exception as e:
             print(f"⚠️ tracepro/evaluate_fitness(parent {individual}) 失敗: {e}")
@@ -378,7 +384,9 @@ def main():
                     folder,
                     individual,
                     return_uniformity=RETURN_UNIFORMITY,
+                    eff_weight=EFF_WEIGHT,
                     process_weight=PROCESS_WEIGHT,
+                    uni_weight=UNI_WEIGHT,
                 )
             else:
                 eval_data = (-999, 0, 0, 0.0, [], [0.0] * 8)  # 給予失敗個體極差的適應度
@@ -513,7 +521,7 @@ def main():
                 TAU_PRIME * np.random.randn() + TAU * np.random.randn(n)
             )
             new_sigma = np.maximum(new_sigma, 0.02)
-            if random.random() < 0.1:
+            if random.random() < 0.6:
                 new_sigma = np.array([0.2, 0.2, 5.0])
             child_gene = clamp_gene(parent_gene + new_sigma * np.random.randn(n))
             children_genes.append(child_gene)
@@ -569,7 +577,9 @@ def main():
                     folder,
                     children_genes[i],
                     return_uniformity=RETURN_UNIFORMITY,
+                    eff_weight=EFF_WEIGHT,
                     process_weight=PROCESS_WEIGHT,
+                    uni_weight=UNI_WEIGHT,
                 )
                 offspring_eval_data[i] = eval_data
                 log_row = create_log_row(

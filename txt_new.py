@@ -1,6 +1,7 @@
 import os
 import numpy as np
 
+
 def read_txt_file(file_path):
     try:
         data = []
@@ -19,14 +20,18 @@ def read_txt_file(file_path):
         print(f"無法處理 {file_path}: {e}")
         return np.array([])
 
+
 def average_intensity(intensities):
     return np.mean(intensities)
+
 
 def uniformity(intensities):
     return np.min(intensities) / np.mean(intensities)
 
+
 def standard_deviation(intensities):
     return np.std(intensities)
+
 
 def score_data(i):
     folder_path = f"GA_population/P{i+1}"
@@ -57,33 +62,45 @@ def score_data(i):
 
 
 def compute_regression_score(S1, S2, A1):
-    S1 = S1 / 1000 
+    S1 = S1 / 1000
     S2 = S2 / 1000
     return (
-        -0.067 +
-        0.217 * S1 +
-        0.275 * S2 +
-        0.002 * A1 -
-        0.506 * S1 * S2 -
-        0.002 * S1 * A1 -
-        0.002 * S2 * A1 +
-        0.004 * S1 * S2 * A1
+        -0.067
+        + 0.217 * S1
+        + 0.275 * S2
+        + 0.002 * A1
+        - 0.506 * S1 * S2
+        - 0.002 * S1 * A1
+        - 0.002 * S2 * A1
+        + 0.004 * S1 * S2 * A1
     )
 
-def evaluate_fitness(folder, individual, return_uniformity=False, process_weight=2):
+
+def evaluate_fitness(
+    folder,
+    individual,
+    return_uniformity=False,
+    eff_weight=0.7,
+    process_weight=0.3,
+    uni_weight=0.1,
+):
     """Evaluate fitness from simulation results in *folder* for the given
     *individual* parameters.
 
-    When ``return_uniformity`` is ``True``, the standard deviation of the
-    upward guiding energy across all angles is calculated and returned as the
-    uniformity metric.
+    When ``return_uniformity`` is ``True``, the upward energy distribution for
+    each measurement angle is analyzed. The standard deviation of the upward
+    energy (polar angle > 90°) is computed per angle and returned as
+    ``uni_10`` .. ``uni_80``. ``uniformity`` is the mean of these per-angle
+    values and contributes to the fitness score as ``1/(1 + uniformity)``.
     """
-    S1, S2, A1 = individual
+    # ``individual`` can sometimes contain more than three values. Only the
+    # first three parameters (S1, S2, A1) are relevant for this evaluation.
+    S1, S2, A1 = individual[:3]
 
     weighted_efficiency_total = 0
     weight_sum = 0
     efficiencies_per_angle = []  # store efficiency for each measurement angle
-    upward_energies = []         # store upward energy for each angle when requested
+    upward_stds = []  # store upward energy standard deviation per angle when requested
 
     weights = [1, 2, 5, 7, 5, 8.5, 1.5, 2]
 
@@ -96,6 +113,7 @@ def evaluate_fitness(folder, individual, return_uniformity=False, process_weight
             data_lines = lines[6:]
             total_energy = 0
             upward_energy = 0
+            upward_values = []
 
             angle_intensities = []
             for line in data_lines:
@@ -109,6 +127,8 @@ def evaluate_fitness(folder, individual, return_uniformity=False, process_weight
                     angle_intensities.append(intensity_col1)
                     if polar_angle > 90:
                         upward_energy += intensity_col1
+                        if return_uniformity:
+                            upward_values.append(intensity_col1)
                 except ValueError:
                     continue
 
@@ -122,10 +142,10 @@ def evaluate_fitness(folder, individual, return_uniformity=False, process_weight
             weight_sum += weights[idx]
 
             if return_uniformity:
-                upward_energies.append(upward_energy)
+                upward_stds.append(np.std(upward_values) if upward_values else 1.0)
 
         except Exception as e:
-            
+
             print(f"無法處理 {txt_path}: {e}")
             efficiencies_per_angle.append(0.0)
             continue
@@ -140,18 +160,28 @@ def evaluate_fitness(folder, individual, return_uniformity=False, process_weight
     except Exception as e:
         print(f"⚠️ 製程品質評估失敗: {e}")
         process_score = 1.0
-    
-    fitness = efficiency * (1 / (1 + process_weight * process_score))
 
     if return_uniformity:
-        uniformity = 1/np.std(upward_energies) if upward_energies else 1
+        uniformity = float(np.mean(upward_stds)) if upward_stds else 0.0
+        uniformity_factor = 1 / (uniformity)
+    else:
+        uniformity = 0.0
+        uniformity_factor = 1.0
+
+    fitness = (
+        eff_weight * efficiency
+        + (1 / (process_weight * process_score))
+        + uni_weight * uniformity_factor
+    )
+
+    if return_uniformity:
         return (
             fitness,
             efficiency,
             process_score,
             uniformity,
             efficiencies_per_angle,
-            upward_energies,
+            upward_stds,
         )
     else:
         return (
