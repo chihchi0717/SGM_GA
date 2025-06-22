@@ -44,6 +44,9 @@ n = 3
 TAU_PRIME = 1 / np.sqrt(2 * n)
 TAU = 1 / np.sqrt(2 * np.sqrt(n))
 
+# 調整突變尺度，增加變異量
+SIGMA_SCALE = 2.0  # >1 會放大突變幅度
+
 # 隨機種子（固定值可重現）
 GLOBAL_SEED = 12
 random.seed(GLOBAL_SEED)
@@ -512,7 +515,8 @@ def main():
             new_sigma = parent_sigma * np.exp(
                 TAU_PRIME * np.random.randn() + TAU * np.random.randn(n)
             )
-            new_sigma = np.maximum(new_sigma, 0.02)
+            new_sigma *= SIGMA_SCALE
+            new_sigma = np.maximum(new_sigma, 0.05)
             if random.random() < 0.1:
                 new_sigma = np.array([0.2, 0.2, 5.0])
             child_gene = clamp_gene(parent_gene + new_sigma * np.random.randn(n))
