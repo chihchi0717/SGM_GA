@@ -21,8 +21,8 @@ import smtplib
 from email.message import EmailMessage
 
 # === ES 參數設定 ===
-POP_SIZE = 3  # μ (親代數量)
-OFFSPRING_SIZE = POP_SIZE  # λ (後代數量)
+POP_SIZE = 5  # μ (親代數量)
+OFFSPRING_SIZE = POP_SIZE * 7  # λ (後代數量)
 N_GENERATIONS = 100  # 總共要執行的世代數
 
 # --- AutoCAD 建模參數 ---
@@ -70,7 +70,8 @@ def write_run_config():
         "N_GENERATIONS": N_GENERATIONS,
         "BUILD_MODE": BUILD_MODE,
         "BUILD_FILLET": BUILD_FILLET,
-        "BUILD_RADIUS": BUILD_RADIUS,
+        "VERTEX_RADIUS": VERTEX_RADIUS,
+        "INSIDE_RADIUS": INSIDE_RADIUS,
         "LIGHT_SOURCE_SIZE": LIGHT_SOURCE_SIZE,
         "SIDE_BOUND": SIDE_BOUND,
         "ANGLE_BOUND": ANGLE_BOUND,
