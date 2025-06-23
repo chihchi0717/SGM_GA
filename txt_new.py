@@ -62,8 +62,6 @@ def score_data(i):
 
 
 def compute_regression_score(S1, S2, A1):
-    S1 = S1 / 1000
-    S2 = S2 / 1000
     return (
         -0.067
         + 0.217 * S1
@@ -172,7 +170,7 @@ def evaluate_fitness(
         uniformity = 0.0
 
     fitness = (
-        eff_weight * efficiency * (1 / (process_weight * process_score))
+        eff_weight * efficiency - (process_weight * process_score)
         + uni_weight * uniformity
     )
 
