@@ -27,8 +27,9 @@ N_GENERATIONS = 100  # 總共要執行的世代數
 
 # --- AutoCAD 建模參數 ---
 BUILD_MODE = "triangle"
-BUILD_FILLET = 1
-BUILD_RADIUS = 0.022
+BUILD_FILLET = 2
+VERTEX_RADIUS = 0.022
+INSIDE_RADIUS = 0.088
 LIGHT_SOURCE_SIZE = 0.5
 
 # --- Fitness 評估參數 ---
@@ -279,7 +280,8 @@ def build_model_with_retry(individual, folder, max_attempts=3):
                 mode=BUILD_MODE,
                 folder=folder,
                 fillet=BUILD_FILLET,
-                radius=BUILD_RADIUS,
+                radius_vertex=VERTEX_RADIUS,
+                radius_inside=INSIDE_RADIUS,
                 light_source_length=LIGHT_SOURCE_SIZE,
             )
             for msg in log:
