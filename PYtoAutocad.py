@@ -291,11 +291,14 @@ class PrismBuilder:
                 x = round((Cx / 2) * self.scale, 1)
                 y = round((Cy / 2) * self.scale, 1)
                 print(f"Fillet corner at: ({x}, {y})")
-                corner_x3 = 0.4
-                corner_y3 = 0.2
-                corner_x4 = 0.1
-                corner_y4 = 0.7
-                equ_bc(corner_x3)
+                # corner_x3 = 0.4
+                # corner_y3 = 0.2
+                # corner_x4 = 0.1
+                # corner_y4 = 0.7
+                corner_x3 = Ix + 0.05
+                corner_y3 = Iy - 0.05
+                corner_x4 = Ix - 0.05
+                corner_y4 = Iy + side_a
 
                 send_command_with_retry(
                     self.acad,
@@ -355,7 +358,7 @@ class PrismBuilder:
             time.sleep(1)
 
         if os.path.exists(paths.sat_path) and os.path.exists(paths.dwg_path):
-            #send_command_with_retry(self.acad, "close\n")
+            # send_command_with_retry(self.acad, "close\n")
             time.sleep(2)
         else:
             print(f"❌ 最終仍未成功產生檔案：{paths.sat_path} 或 {paths.dwg_path}。")
@@ -412,5 +415,5 @@ def Build_model(
 #         folder=r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202506\0623",
 #         fillet=2,
 #         radius_vertex=0.044,
-#         radius_inside= 0.088
+#         radius_inside=0.088,
 #     )
