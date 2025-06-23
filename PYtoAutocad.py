@@ -189,7 +189,8 @@ class PrismBuilder:
         mode: str,
         paths: OutputPaths,
         fillet: int,
-        radius: float,
+        radius_vertex: float,
+        radius_inside: float,
         light_source_length: float,
     ) -> None:
         side_a = round(sid_ang[0], 2)
@@ -217,7 +218,7 @@ class PrismBuilder:
                 send_command_with_retry(self.acad, f"-BOUNDARY\n{Ix},{Iy}\n\n")
                 send_command_with_retry(self.acad, "_EXTRUDE\nL\n\n1\n")
                 send_command_with_retry(self.acad, "UNION\nALL\n\n")
-                
+
                 rows, columns = 30, 1
                 row_spacing = side_a * self.scale * (rows - 1)
                 column_spacing = 1
@@ -232,7 +233,6 @@ class PrismBuilder:
 
                 send_command_with_retry(self.acad, "UNION\nALL\n\n")
 
-                
             if fillet == 1:
                 x = round(Cx * self.scale, 1)
                 y = round(Cy * self.scale, 1)
@@ -243,7 +243,7 @@ class PrismBuilder:
 
                 send_command_with_retry(
                     self.acad,
-                    f"FILLET\nRadius\n{radius}\nC\n{corner_x1},{corner_y1}\n{corner_x2},{corner_y2}\n",
+                    f"FILLET\nRadius\n{radius_vertex}\nC\n{corner_x1},{corner_y1}\n{corner_x2},{corner_y2}\n",
                 )
 
                 send_command_with_retry(self.acad, f"-BOUNDARY\n{Ix},{Iy}\n\n")
@@ -263,7 +263,6 @@ class PrismBuilder:
 
                 send_command_with_retry(self.acad, "UNION\nALL\n\n")
 
-
             if fillet == 2:
                 x = round(Cx * self.scale, 1)
                 y = round(Cy * self.scale, 1)
@@ -274,7 +273,7 @@ class PrismBuilder:
 
                 send_command_with_retry(
                     self.acad,
-                    f"FILLET\nRadius\n{radius}\nC\n{corner_x1},{corner_y1}\n{corner_x2},{corner_y2}\n",
+                    f"FILLET\nRadius\n{radius_vertex}\nC\n{corner_x1},{corner_y1}\n{corner_x2},{corner_y2}\n",
                 )
                 rows, columns = 2, 1
                 row_spacing = side_a * self.scale * (rows - 1)
@@ -300,7 +299,7 @@ class PrismBuilder:
 
                 send_command_with_retry(
                     self.acad,
-                    f"FILLET\nRadius\n{radius}\nC\n{corner_x3},{corner_y3}\n{corner_x4},{corner_y4}\n",
+                    f"FILLET\nRadius\n{radius_inside}\nC\n{corner_x3},{corner_y3}\n{corner_x4},{corner_y4}\n",
                 )
                 rows, columns = 30, 1
                 row_spacing = side_a * self.scale * (rows - 1)
@@ -329,7 +328,6 @@ class PrismBuilder:
         else:
             raise ValueError("mode must be 'stair' or 'triangle'")
 
-
         actual_array_top = top + (rows - 1) * (top - bottom)
         array_center_y = (actual_array_top + bottom) / 2
         center_y = round(array_center_y * self.scale, 1)
@@ -357,7 +355,7 @@ class PrismBuilder:
             time.sleep(1)
 
         if os.path.exists(paths.sat_path) and os.path.exists(paths.dwg_path):
-            send_command_with_retry(self.acad, "close\n")
+            #send_command_with_retry(self.acad, "close\n")
             time.sleep(2)
         else:
             print(f"❌ 最終仍未成功產生檔案：{paths.sat_path} 或 {paths.dwg_path}。")
@@ -370,10 +368,11 @@ class PrismBuilder:
 
 def Build_model(
     sid_ang,
-    mode: str = "stair",
+    mode: str = "triangle",
     folder: str = ".",
-    fillet: int = 1,
-    radius: float = 0.022,
+    fillet: int = 2,
+    radius_vertex: float = 0.022,
+    radius_inside: float = 0.088,
     light_source_length: float = 0.5,
     builder_params: dict | None = None,
 ):
@@ -394,7 +393,8 @@ def Build_model(
         mode=mode,
         paths=paths,
         fillet=fillet,
-        radius=radius,
+        radius_vertex=radius_vertex,
+        radius_inside=radius_inside,
         light_source_length=light_source_length,
     )
     return 1, []
@@ -405,9 +405,12 @@ def Build_model(
 # ---------------------------------------------------------------------------
 
 # if __name__ == "__main__":
-#     sid_ang = [0.46, 0.9, 81]
+#     sid_ang = [0.6, 0.8, 60]
 #     Build_model(
 #         sid_ang,
 #         mode="triangle",
-#         folder=r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202506\0620",
+#         folder=r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202506\0623",
+#         fillet=2,
+#         radius_vertex=0.044,
+#         radius_inside= 0.088
 #     )
