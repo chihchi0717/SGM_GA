@@ -21,8 +21,8 @@ import smtplib
 from email.message import EmailMessage
 
 # === ES 參數設定 ===
-POP_SIZE = 5  # μ (親代數量)
-OFFSPRING_SIZE = POP_SIZE * 7  # λ (後代數量)
+POP_SIZE = 10  # μ (親代數量)
+OFFSPRING_SIZE = POP_SIZE *7  # λ (後代數量)
 N_GENERATIONS = 100  # 總共要執行的世代數
 
 # --- AutoCAD 建模參數 ---
@@ -33,14 +33,14 @@ INSIDE_RADIUS = 0.088
 LIGHT_SOURCE_SIZE = 0.5
 
 # --- Fitness 評估參數 ---
-RETURN_UNIFORMITY = True
+RETURN_UNIFORMITY = False
 EFF_WEIGHT = 1
 PROCESS_WEIGHT = 1
 UNI_WEIGHT = 1
 
 # 基因範圍
 SIDE_BOUND = [0.4, 1.6]
-ANGLE_BOUND = [1, 179]
+ANGLE_BOUND = [60, 90]
 
 # ES 自適應突變學習率 (n=3)
 n = 3
@@ -49,7 +49,7 @@ TAU = 1 / np.sqrt(2 * np.sqrt(n))
 SIGMA_SCALE = 2.0  # >1 會放大突變幅度
 
 # 隨機種子（固定值可重現）
-GLOBAL_SEED = 12
+GLOBAL_SEED = 50
 random.seed(GLOBAL_SEED)
 np.random.seed(GLOBAL_SEED)
 
@@ -57,7 +57,7 @@ np.random.seed(GLOBAL_SEED)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 save_root = os.path.join(BASE_DIR, "GA_population")
 # 【保留您的變數】使用 log_dir 作為日誌的根目錄
-log_dir = r"C:\Users\cchih\OneDrive - NTHU\msi"
+log_dir = r"C:\Users\user\OneDrive - NTHU\home"
 os.makedirs(save_root, exist_ok=True)
 os.makedirs(log_dir, exist_ok=True)
 

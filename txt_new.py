@@ -123,7 +123,7 @@ def evaluate_fitness(
                     intensity_col1 = float(parts[1])
                     total_energy += intensity_col1
                     angle_intensities.append(intensity_col1)
-                    if polar_angle > 90:
+                    if polar_angle > 100:
                         upward_energy += intensity_col1
                         if return_uniformity:
                             upward_values.append(intensity_col1)
