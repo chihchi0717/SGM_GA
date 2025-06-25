@@ -423,7 +423,7 @@ class PrismBuilder:
             time.sleep(1)
 
         if os.path.exists(paths.sat_path) and os.path.exists(paths.dwg_path):
-            # send_command_with_retry(self.acad, "close\n")
+            send_command_with_retry(self.acad, "close\n")
             time.sleep(2)
         else:
             print(f"❌ 最終仍未成功產生檔案：{paths.sat_path} 或 {paths.dwg_path}。")
