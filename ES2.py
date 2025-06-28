@@ -124,6 +124,20 @@ def clamp_gene(child):
     return child
 
 
+def compute_scalar_fitness(eval_tuple):
+    """將多目標評估值轉換為單一數值，僅用於記錄與摘要。"""
+    if len(eval_tuple) >= 3:
+        efficiency, process_score, uniformity = eval_tuple[:3]
+    elif len(eval_tuple) == 2:
+        efficiency, process_score = eval_tuple
+        uniformity = 0.0
+    else:
+        return 0.0
+    return (
+        EFF_WEIGHT * efficiency - (PROCESS_WEIGHT * process_score) + UNI_WEIGHT * uniformity
+    )
+
+
 def save_generation_log(generation_data, file_path):
     """將單一世代的歷史紀錄寫入指定的 CSV"""
     if not generation_data:
@@ -163,14 +177,15 @@ def create_log_row(
     individual, sigma, fitness_data, generation, role, parent_indices, seed=None
 ):
     """建立一筆日誌紀錄的字典物件"""
-    if len(fitness_data) >= 6:
-        fitness, efficiency, process_score, uniformity, angle_effs, angle_unis = (
-            fitness_data[:6]
+    if len(fitness_data) >= 5:
+        efficiency, process_score, uniformity, angle_effs, angle_unis = (
+            fitness_data[:5]
         )
     else:
-        fitness, efficiency, process_score, angle_effs = fitness_data
+        efficiency, process_score, angle_effs = fitness_data
         uniformity = 0.0
         angle_unis = []
+    fitness = compute_scalar_fitness((efficiency, process_score, uniformity))
     p_idx1, p_idx2 = parent_indices
     row = {
         "generation": generation,
@@ -199,9 +214,12 @@ def create_log_row(
 
 
 def evaluate_objectives(fitness_data):
-    """Extract objectives [efficiency, -process_score, uniformity] from fitness data."""
-    if len(fitness_data) >= 4:
-        _, efficiency, process_score, uniformity = fitness_data[:4]
+    """Extract objectives [efficiency, -process_score, uniformity] from evaluation data."""
+    if len(fitness_data) >= 3:
+        efficiency, process_score, uniformity = fitness_data[:3]
+    elif len(fitness_data) == 2:
+        efficiency, process_score = fitness_data
+        uniformity = 0.0
     else:
         return np.array([0.0, 0.0, 0.0])
     return np.array([efficiency, -process_score, uniformity])
@@ -294,7 +312,6 @@ def check_if_evaluated(fitness_log, individual):
             and row.get("A1") == A1_check
         ):
             try:
-                fitness = float(row["fitness"])
                 efficiency = float(row["efficiency"])
                 process_score = float(row["process_score"])
                 cv = float(row.get("cv", 0.0))
@@ -320,14 +337,18 @@ def check_if_evaluated(fitness_log, individual):
                     else:
                         cv_a = 1.0
                     angle_unis.append(max(0.0, 1.0 - cv_a))
-                return True, (
-                    fitness,
+                data = (
                     efficiency,
                     process_score,
                     uniformity,
                     angle_effs,
                     angle_unis,
                 )
+                fitness_val = compute_scalar_fitness(data)
+                print(
+                    f"  [DEBUG] 從紀錄取得個體: Gene={individual}, Fitness={fitness_val:.4f}"
+                )
+                return True, data
             except (ValueError, KeyError):
                 continue
     return False, None
@@ -455,7 +476,13 @@ def main():
                     uni_weight=UNI_WEIGHT,
                 )
             else:
-                eval_data = (-999, 0, 0, 0.0, [], [0.0] * 8)  # 給予失敗個體極差的適應度
+                eval_data = (
+                    0.0,
+                    1000.0,
+                    0.0,
+                    [],
+                    [0.0] * 8,
+                )  # 給予失敗個體極差的適應度
 
             parent_eval_data.append(eval_data)
             log_row = create_log_row(
@@ -464,7 +491,9 @@ def main():
             initial_gen_log.append(log_row)
 
         max_fitness_gen1 = (
-            max(d[0] for d in parent_eval_data) if parent_eval_data else -999
+            max(compute_scalar_fitness(d) for d in parent_eval_data)
+            if parent_eval_data
+            else -999
         )
         gen1_filename = f"fitness_gen1_max{max_fitness_gen1:.2f}.csv"
         save_generation_log(initial_gen_log, os.path.join(log_dir, gen1_filename))
@@ -505,7 +534,6 @@ def main():
                     float(row["sigma3"]),
                 ]
                 pop_sigmas_list.append(sigma)
-                fitness = float(row["fitness"])
                 efficiency = float(row["efficiency"])
                 process_score = float(row["process_score"])
                 cv = float(row.get("cv", 0.0))
@@ -531,17 +559,18 @@ def main():
                     else:
                         cv_a = 1.0
                     angle_unis.append(max(0.0, 1.0 - cv_a))
-                parent_eval_data.append(
-                    (
-                        fitness,
-                        efficiency,
-                        process_score,
-                        uniformity,
-                        angle_effs,
-                        angle_unis,
-                    )
+                data = (
+                    efficiency,
+                    process_score,
+                    uniformity,
+                    angle_effs,
+                    angle_unis,
                 )
-                print(f"  [DEBUG] 已恢復親代 {i}: Gene={gene}, Fitness={fitness:.4f}")
+                fitness_val = compute_scalar_fitness(data)
+                parent_eval_data.append(data)
+                print(
+                    f"  [DEBUG] 已恢復親代 {i}: Gene={gene}, Fitness={fitness_val:.4f}"
+                )
             except (ValueError, KeyError) as e:
                 send_error(
                     "恢復親代數據失敗",
@@ -603,7 +632,9 @@ def main():
         for i, individual in enumerate(children_genes):
             is_evaluated, eval_data = check_if_evaluated(full_history_log, individual)
             if is_evaluated:
-                print(f"  子代 P{i+1} 已在紀錄中，直接使用分數: {eval_data[0]:.4f}")
+                print(
+                    f"  子代 P{i+1} 已在紀錄中，直接使用分數: {compute_scalar_fitness(eval_data):.4f}"
+                )
                 offspring_eval_data[i] = eval_data
                 log_row = create_log_row(
                     individual,
@@ -681,7 +712,7 @@ def main():
         combined_sigmas = np.vstack([pop_sigmas, children_sigmas])
         combined_eval_data = parent_eval_data + offspring_eval_data
         objectives = np.array([evaluate_objectives(d) for d in combined_eval_data])
-        combined_fitness = [d[0] for d in combined_eval_data]
+        combined_fitness = [compute_scalar_fitness(d) for d in combined_eval_data]
         fronts = fast_non_dominated_sort(objectives)
 
         new_parents, new_sigmas, new_eval_data = [], [], []
