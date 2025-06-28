@@ -271,6 +271,52 @@ def check_if_evaluated(fitness_log, individual):
     return False, None
 
 
+def _dominates(a, b):
+    """Return True if objective vector *a* dominates *b*."""
+    return all(x >= y for x, y in zip(a, b)) and any(x > y for x, y in zip(a, b))
+
+
+def pareto_sort(metrics, fitness_scores):
+    """Sort indices by Pareto fronts and weighted fitness for tie-break."""
+    population_size = len(metrics)
+    S = [set() for _ in range(population_size)]
+    n_dom = [0] * population_size
+    fronts = [[]]
+
+    for p in range(population_size):
+        for q in range(population_size):
+            if p == q:
+                continue
+            if _dominates(metrics[p], metrics[q]):
+                S[p].add(q)
+            elif _dominates(metrics[q], metrics[p]):
+                n_dom[p] += 1
+        if n_dom[p] == 0:
+            fronts[0].append(p)
+
+    i = 0
+    ranks = [0] * population_size
+    while fronts[i]:
+        next_front = []
+        for p in fronts[i]:
+            ranks[p] = i
+            for q in S[p]:
+                n_dom[q] -= 1
+                if n_dom[q] == 0:
+                    next_front.append(q)
+        i += 1
+        if next_front:
+            fronts.append(next_front)
+        else:
+            break
+
+    sorted_idx = []
+    for front in fronts:
+        front_sorted = sorted(front, key=lambda idx: fitness_scores[idx], reverse=True)
+        sorted_idx.extend(front_sorted)
+    return sorted_idx
+
+
 def build_model_with_retry(individual, folder, max_attempts=3):
     """Build a model with retries to handle transient AutoCAD errors."""
     attempt = 0
@@ -619,7 +665,12 @@ def main():
         combined_sigmas = np.vstack([pop_sigmas, children_sigmas])
         combined_eval_data = parent_eval_data + offspring_eval_data
         combined_fitness = [d[0] for d in combined_eval_data]
-        sorted_idx = np.argsort(combined_fitness)[::-1]
+
+        metrics = [
+            (d[1], -d[2], d[3])  # efficiency ↑, process_score ↓, uniformity ↑
+            for d in combined_eval_data
+        ]
+        sorted_idx = pareto_sort(metrics, combined_fitness)
 
         new_parents, new_sigmas, new_eval_data = [], [], []
         count_dict = {}
