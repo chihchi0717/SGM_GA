@@ -295,11 +295,9 @@ def pareto_sort(metrics, fitness_scores):
             fronts[0].append(p)
 
     i = 0
-    ranks = [0] * population_size
     while fronts[i]:
         next_front = []
         for p in fronts[i]:
-            ranks[p] = i
             for q in S[p]:
                 n_dom[q] -= 1
                 if n_dom[q] == 0:
