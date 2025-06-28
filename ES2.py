@@ -33,7 +33,7 @@ INSIDE_RADIUS = 0.088
 LIGHT_SOURCE_SIZE = 0.5
 
 # --- Fitness 評估參數 ---
-RETURN_UNIFORMITY = False
+RETURN_UNIFORMITY = True
 EFF_WEIGHT = 1
 PROCESS_WEIGHT = 1
 UNI_WEIGHT = 1
@@ -196,6 +196,68 @@ def create_log_row(
         for angle, uni_a in zip(range(10, 90, 10), angle_unis):
             row[f"uni_{angle}"] = f"{uni_a:.6f}"
     return row
+
+
+def evaluate_objectives(fitness_data):
+    """Extract objectives [efficiency, -process_score, uniformity] from fitness data."""
+    if len(fitness_data) >= 4:
+        _, efficiency, process_score, uniformity = fitness_data[:4]
+    else:
+        return np.array([0.0, 0.0, 0.0])
+    return np.array([efficiency, -process_score, uniformity])
+
+
+def fast_non_dominated_sort(objectives):
+    """Perform non-dominated sorting and return list of fronts (list of indices)."""
+    S = [set() for _ in objectives]
+    domination_count = [0 for _ in objectives]
+    fronts = [[]]
+    for p, obj_p in enumerate(objectives):
+        for q, obj_q in enumerate(objectives):
+            if p == q:
+                continue
+            if np.all(obj_p >= obj_q) and np.any(obj_p > obj_q):
+                S[p].add(q)
+            elif np.all(obj_q >= obj_p) and np.any(obj_q > obj_p):
+                domination_count[p] += 1
+        if domination_count[p] == 0:
+            fronts[0].append(p)
+    i = 0
+    while fronts[i]:
+        next_front = []
+        for p in fronts[i]:
+            for q in S[p]:
+                domination_count[q] -= 1
+                if domination_count[q] == 0:
+                    next_front.append(q)
+        i += 1
+        fronts.append(next_front)
+    if not fronts[-1]:
+        fronts.pop()
+    return fronts
+
+
+def crowding_distance(front_indices, objectives):
+    """Compute crowding distance for individuals in one front."""
+    if not front_indices:
+        return {}
+    num_obj = objectives.shape[1]
+    distances = {idx: 0.0 for idx in front_indices}
+    front_objs = objectives[front_indices]
+    for m in range(num_obj):
+        obj_values = front_objs[:, m]
+        order = np.argsort(obj_values)
+        distances[front_indices[order[0]]] = float("inf")
+        distances[front_indices[order[-1]]] = float("inf")
+        min_v = obj_values[order[0]]
+        max_v = obj_values[order[-1]]
+        if max_v - min_v == 0:
+            continue
+        for i in range(1, len(front_indices) - 1):
+            prev_v = obj_values[order[i - 1]]
+            next_v = obj_values[order[i + 1]]
+            distances[front_indices[order[i]]] += (next_v - prev_v) / (max_v - min_v)
+    return distances
 
 
 def find_last_completed_generation(directory):
@@ -618,33 +680,42 @@ def main():
         combined_genes = np.vstack([pop_genes, children_genes])
         combined_sigmas = np.vstack([pop_sigmas, children_sigmas])
         combined_eval_data = parent_eval_data + offspring_eval_data
+        objectives = np.array([evaluate_objectives(d) for d in combined_eval_data])
         combined_fitness = [d[0] for d in combined_eval_data]
-        sorted_idx = np.argsort(combined_fitness)[::-1]
+        fronts = fast_non_dominated_sort(objectives)
 
         new_parents, new_sigmas, new_eval_data = [], [], []
-        count_dict = {}
-        MAX_DUPLICATE = 2
-        selected_indices = set()
-        for idx in sorted_idx:
-            if len(new_parents) >= POP_SIZE:
-                break
-            gene = combined_genes[idx]
-            key = (round(gene[0], 2), round(gene[1], 2), int(gene[2]))
-            count = count_dict.get(key, 0)
-            if count < MAX_DUPLICATE:
-                new_parents.append(gene)
-                new_sigmas.append(combined_sigmas[idx])
-                new_eval_data.append(combined_eval_data[idx])
-                count_dict[key] = count + 1
-                selected_indices.add(idx)
-        if len(new_parents) < POP_SIZE:
-            for idx in sorted_idx:
-                if len(new_parents) >= POP_SIZE:
-                    break
-                if idx not in selected_indices:
+        for front in fronts:
+            if len(new_parents) + len(front) <= POP_SIZE:
+                for idx in front:
                     new_parents.append(combined_genes[idx])
                     new_sigmas.append(combined_sigmas[idx])
                     new_eval_data.append(combined_eval_data[idx])
+            else:
+                remaining = POP_SIZE - len(new_parents)
+                cd = crowding_distance(front, objectives)
+                sorted_front = sorted(front, key=lambda i: cd[i], reverse=True)
+                for idx in sorted_front[:remaining]:
+                    new_parents.append(combined_genes[idx])
+                    new_sigmas.append(combined_sigmas[idx])
+                    new_eval_data.append(combined_eval_data[idx])
+                break
+
+        pareto_front = fronts[0] if fronts else []
+        pareto_rows = []
+        for idx in pareto_front:
+            row = create_log_row(
+                combined_genes[idx],
+                combined_sigmas[idx],
+                combined_eval_data[idx],
+                current_gen,
+                "pareto",
+                (-1, -1),
+            )
+            pareto_rows.append(row)
+        if pareto_rows:
+            pareto_filename = f"pareto_gen{current_gen}.csv"
+            save_generation_log(pareto_rows, os.path.join(log_dir, pareto_filename))
 
         pop_genes = np.array(new_parents, dtype=float)
         pop_sigmas = np.array(new_sigmas, dtype=float)
