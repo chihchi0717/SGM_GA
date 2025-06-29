@@ -82,13 +82,14 @@ def evaluate_fitness(
     process_weight=0.3,
     uni_weight=0.1,
 ):
-    """Evaluate optical performance for *individual* and return multiple objectives.
+    """Evaluate fitness from simulation results in *folder* for the given
+    *individual* parameters.
 
     When ``return_uniformity`` is ``True``, the upward energy distribution for
     each measurement angle is analyzed. The standard deviation of the upward
     energy (polar angle > 90°) is computed per angle and returned as
-    ``uni_10`` .. ``uni_80``.  The function returns efficiency, process score and
-    uniformity without aggregating them into a single fitness value.
+    ``uni_10`` .. ``uni_80``. ``uniformity`` is the mean of these per-angle
+    values and contributes to the fitness score as ``1/(1 + uniformity)``.
     """
     # ``individual`` can sometimes contain more than three values. Only the
     # first three parameters (S1, S2, A1) are relevant for this evaluation.
@@ -157,10 +158,10 @@ def evaluate_fitness(
         efficiency = weighted_efficiency_total / weight_sum
 
     try:
-        process_score = compute_regression_score(S1, S2, A1)
+        emd = compute_regression_score(S1, S2, A1)
     except Exception as e:
         print(f"⚠️ 製程品質評估失敗: {e}")
-        process_score = 1.0
+        emd = 1.0
 
     if return_uniformity:
         uniformity = float(np.mean(upward_uni)) if upward_uni else 0.0
@@ -168,8 +169,15 @@ def evaluate_fitness(
     else:
         uniformity = 0.0
 
+    process_score = 1 / (1+emd) 
+    fitness = (
+        eff_weight * efficiency *  process_score
+        + uni_weight * uniformity
+    )
+
     if return_uniformity:
         return (
+            fitness,
             efficiency,
             process_score,
             uniformity,
@@ -178,9 +186,8 @@ def evaluate_fitness(
         )
     else:
         return (
+            fitness,
             efficiency,
             process_score,
-            0.0,
             efficiencies_per_angle,
-            [],
         )

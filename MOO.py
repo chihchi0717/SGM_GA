@@ -28,7 +28,7 @@ N_GENERATIONS = 100  # 總共要執行的世代數
 # --- AutoCAD 建模參數 ---
 BUILD_MODE = "triangle"
 BUILD_FILLET = 0
-VERTEX_RADIUS = 0.044
+VERTEX_RADIUS = 0.022
 INSIDE_RADIUS = 0.088
 LIGHT_SOURCE_SIZE = 0.5
 
@@ -39,7 +39,7 @@ PROCESS_WEIGHT = 1
 UNI_WEIGHT = 1
 
 # 基因範圍
-SIDE_BOUND = [0.4, 1]
+SIDE_BOUND = [0.1, 1]
 ANGLE_BOUND = [50, 100]
 
 # ES 自適應突變學習率 (n=3)
@@ -49,7 +49,7 @@ TAU = 1 / np.sqrt(2 * np.sqrt(n))
 SIGMA_SCALE = 2.0  # >1 會放大突變幅度
 
 # 隨機種子（固定值可重現）
-GLOBAL_SEED = 42
+GLOBAL_SEED = 14
 random.seed(GLOBAL_SEED)
 np.random.seed(GLOBAL_SEED)
 
@@ -124,6 +124,20 @@ def clamp_gene(child):
     return child
 
 
+def compute_scalar_fitness(eval_tuple):
+    """將多目標評估值轉換為單一數值，僅用於記錄與摘要。"""
+    if len(eval_tuple) >= 3:
+        efficiency, process_score, uniformity = eval_tuple[:3]
+    elif len(eval_tuple) == 2:
+        efficiency, process_score = eval_tuple
+        uniformity = 0.0
+    else:
+        return 0.0
+    return (
+        EFF_WEIGHT * efficiency - (PROCESS_WEIGHT * process_score) + UNI_WEIGHT * uniformity
+    )
+
+
 def save_generation_log(generation_data, file_path):
     """將單一世代的歷史紀錄寫入指定的 CSV"""
     if not generation_data:
@@ -163,14 +177,15 @@ def create_log_row(
     individual, sigma, fitness_data, generation, role, parent_indices, seed=None
 ):
     """建立一筆日誌紀錄的字典物件"""
-    if len(fitness_data) >= 6:
-        fitness, efficiency, process_score, uniformity, angle_effs, angle_unis = (
-            fitness_data[:6]
+    if len(fitness_data) >= 5:
+        efficiency, process_score, uniformity, angle_effs, angle_unis = (
+            fitness_data[:5]
         )
     else:
-        fitness, efficiency, process_score, angle_effs = fitness_data
+        efficiency, process_score, angle_effs = fitness_data
         uniformity = 0.0
         angle_unis = []
+    fitness = compute_scalar_fitness((efficiency, process_score, uniformity))
     p_idx1, p_idx2 = parent_indices
     row = {
         "generation": generation,
@@ -196,6 +211,71 @@ def create_log_row(
         for angle, uni_a in zip(range(10, 90, 10), angle_unis):
             row[f"uni_{angle}"] = f"{uni_a:.6f}"
     return row
+
+
+def evaluate_objectives(fitness_data):
+    """Extract objectives [efficiency, -process_score, uniformity] from evaluation data."""
+    if len(fitness_data) >= 3:
+        efficiency, process_score, uniformity = fitness_data[:3]
+    elif len(fitness_data) == 2:
+        efficiency, process_score = fitness_data
+        uniformity = 0.0
+    else:
+        return np.array([0.0, 0.0, 0.0])
+    return np.array([efficiency, -process_score, uniformity])
+
+
+def fast_non_dominated_sort(objectives):
+    """Perform non-dominated sorting and return list of fronts (list of indices)."""
+    S = [set() for _ in objectives]
+    domination_count = [0 for _ in objectives]
+    fronts = [[]]
+    for p, obj_p in enumerate(objectives):
+        for q, obj_q in enumerate(objectives):
+            if p == q:
+                continue
+            if np.all(obj_p >= obj_q) and np.any(obj_p > obj_q):
+                S[p].add(q)
+            elif np.all(obj_q >= obj_p) and np.any(obj_q > obj_p):
+                domination_count[p] += 1
+        if domination_count[p] == 0:
+            fronts[0].append(p)
+    i = 0
+    while fronts[i]:
+        next_front = []
+        for p in fronts[i]:
+            for q in S[p]:
+                domination_count[q] -= 1
+                if domination_count[q] == 0:
+                    next_front.append(q)
+        i += 1
+        fronts.append(next_front)
+    if not fronts[-1]:
+        fronts.pop()
+    return fronts
+
+
+def crowding_distance(front_indices, objectives):
+    """Compute crowding distance for individuals in one front."""
+    if not front_indices:
+        return {}
+    num_obj = objectives.shape[1]
+    distances = {idx: 0.0 for idx in front_indices}
+    front_objs = objectives[front_indices]
+    for m in range(num_obj):
+        obj_values = front_objs[:, m]
+        order = np.argsort(obj_values)
+        distances[front_indices[order[0]]] = float("inf")
+        distances[front_indices[order[-1]]] = float("inf")
+        min_v = obj_values[order[0]]
+        max_v = obj_values[order[-1]]
+        if max_v - min_v == 0:
+            continue
+        for i in range(1, len(front_indices) - 1):
+            prev_v = obj_values[order[i - 1]]
+            next_v = obj_values[order[i + 1]]
+            distances[front_indices[order[i]]] += (next_v - prev_v) / (max_v - min_v)
+    return distances
 
 
 def find_last_completed_generation(directory):
@@ -232,7 +312,6 @@ def check_if_evaluated(fitness_log, individual):
             and row.get("A1") == A1_check
         ):
             try:
-                fitness = float(row["fitness"])
                 efficiency = float(row["efficiency"])
                 process_score = float(row["process_score"])
                 cv = float(row.get("cv", 0.0))
@@ -258,14 +337,18 @@ def check_if_evaluated(fitness_log, individual):
                     else:
                         cv_a = 1.0
                     angle_unis.append(max(0.0, 1.0 - cv_a))
-                return True, (
-                    fitness,
+                data = (
                     efficiency,
                     process_score,
                     uniformity,
                     angle_effs,
                     angle_unis,
                 )
+                fitness_val = compute_scalar_fitness(data)
+                print(
+                    f"  [DEBUG] 從紀錄取得個體: Gene={individual}, Fitness={fitness_val:.4f}"
+                )
+                return True, data
             except (ValueError, KeyError):
                 continue
     return False, None
@@ -393,7 +476,13 @@ def main():
                     uni_weight=UNI_WEIGHT,
                 )
             else:
-                eval_data = (-999, 0, 0, 0.0, [], [0.0] * 8)  # 給予失敗個體極差的適應度
+                eval_data = (
+                    0.0,
+                    1000.0,
+                    0.0,
+                    [],
+                    [0.0] * 8,
+                )  # 給予失敗個體極差的適應度
 
             parent_eval_data.append(eval_data)
             log_row = create_log_row(
@@ -402,7 +491,9 @@ def main():
             initial_gen_log.append(log_row)
 
         max_fitness_gen1 = (
-            max(d[0] for d in parent_eval_data) if parent_eval_data else -999
+            max(compute_scalar_fitness(d) for d in parent_eval_data)
+            if parent_eval_data
+            else -999
         )
         gen1_filename = f"fitness_gen1_max{max_fitness_gen1:.2f}.csv"
         save_generation_log(initial_gen_log, os.path.join(log_dir, gen1_filename))
@@ -443,7 +534,6 @@ def main():
                     float(row["sigma3"]),
                 ]
                 pop_sigmas_list.append(sigma)
-                fitness = float(row["fitness"])
                 efficiency = float(row["efficiency"])
                 process_score = float(row["process_score"])
                 cv = float(row.get("cv", 0.0))
@@ -469,17 +559,18 @@ def main():
                     else:
                         cv_a = 1.0
                     angle_unis.append(max(0.0, 1.0 - cv_a))
-                parent_eval_data.append(
-                    (
-                        fitness,
-                        efficiency,
-                        process_score,
-                        uniformity,
-                        angle_effs,
-                        angle_unis,
-                    )
+                data = (
+                    efficiency,
+                    process_score,
+                    uniformity,
+                    angle_effs,
+                    angle_unis,
                 )
-                print(f"  [DEBUG] 已恢復親代 {i}: Gene={gene}, Fitness={fitness:.4f}")
+                fitness_val = compute_scalar_fitness(data)
+                parent_eval_data.append(data)
+                print(
+                    f"  [DEBUG] 已恢復親代 {i}: Gene={gene}, Fitness={fitness_val:.4f}"
+                )
             except (ValueError, KeyError) as e:
                 send_error(
                     "恢復親代數據失敗",
@@ -541,7 +632,9 @@ def main():
         for i, individual in enumerate(children_genes):
             is_evaluated, eval_data = check_if_evaluated(full_history_log, individual)
             if is_evaluated:
-                print(f"  子代 P{i+1} 已在紀錄中，直接使用分數: {eval_data[0]:.4f}")
+                print(
+                    f"  子代 P{i+1} 已在紀錄中，直接使用分數: {compute_scalar_fitness(eval_data):.4f}"
+                )
                 offspring_eval_data[i] = eval_data
                 log_row = create_log_row(
                     individual,
@@ -562,7 +655,7 @@ def main():
             for i in needs_processing_indices:
                 folder = os.path.join(save_root, f"P{i+1}")
                 os.makedirs(folder, exist_ok=True)
-                print(f"  建立子代模型 P{i+1},{children_genes[i]}")
+                print(f"  建立子代模型 P{i+1}...")
                 build_model_with_retry(children_genes[i], folder)
 
             print(
@@ -618,33 +711,42 @@ def main():
         combined_genes = np.vstack([pop_genes, children_genes])
         combined_sigmas = np.vstack([pop_sigmas, children_sigmas])
         combined_eval_data = parent_eval_data + offspring_eval_data
-        combined_fitness = [d[0] for d in combined_eval_data]
-        sorted_idx = np.argsort(combined_fitness)[::-1]
+        objectives = np.array([evaluate_objectives(d) for d in combined_eval_data])
+        combined_fitness = [compute_scalar_fitness(d) for d in combined_eval_data]
+        fronts = fast_non_dominated_sort(objectives)
 
         new_parents, new_sigmas, new_eval_data = [], [], []
-        count_dict = {}
-        MAX_DUPLICATE = 2
-        selected_indices = set()
-        for idx in sorted_idx:
-            if len(new_parents) >= POP_SIZE:
-                break
-            gene = combined_genes[idx]
-            key = (round(gene[0], 2), round(gene[1], 2), int(gene[2]))
-            count = count_dict.get(key, 0)
-            if count < MAX_DUPLICATE:
-                new_parents.append(gene)
-                new_sigmas.append(combined_sigmas[idx])
-                new_eval_data.append(combined_eval_data[idx])
-                count_dict[key] = count + 1
-                selected_indices.add(idx)
-        if len(new_parents) < POP_SIZE:
-            for idx in sorted_idx:
-                if len(new_parents) >= POP_SIZE:
-                    break
-                if idx not in selected_indices:
+        for front in fronts:
+            if len(new_parents) + len(front) <= POP_SIZE:
+                for idx in front:
                     new_parents.append(combined_genes[idx])
                     new_sigmas.append(combined_sigmas[idx])
                     new_eval_data.append(combined_eval_data[idx])
+            else:
+                remaining = POP_SIZE - len(new_parents)
+                cd = crowding_distance(front, objectives)
+                sorted_front = sorted(front, key=lambda i: cd[i], reverse=True)
+                for idx in sorted_front[:remaining]:
+                    new_parents.append(combined_genes[idx])
+                    new_sigmas.append(combined_sigmas[idx])
+                    new_eval_data.append(combined_eval_data[idx])
+                break
+
+        pareto_front = fronts[0] if fronts else []
+        pareto_rows = []
+        for idx in pareto_front:
+            row = create_log_row(
+                combined_genes[idx],
+                combined_sigmas[idx],
+                combined_eval_data[idx],
+                current_gen,
+                "pareto",
+                (-1, -1),
+            )
+            pareto_rows.append(row)
+        if pareto_rows:
+            pareto_filename = f"pareto_gen{current_gen}.csv"
+            save_generation_log(pareto_rows, os.path.join(log_dir, pareto_filename))
 
         pop_genes = np.array(new_parents, dtype=float)
         pop_sigmas = np.array(new_sigmas, dtype=float)

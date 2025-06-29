@@ -397,7 +397,7 @@ class PrismBuilder:
             raise ValueError("mode must be 'stair' or 'triangle'")
 
         actual_array_top = top + (rows - 1) * (top - bottom)
-        array_center_y = (actual_array_top + bottom) / 2
+        array_center_y = (actual_array_top ) / 2 #+ bottom
         center_y = round(array_center_y * self.scale, 1)
         center_x = 0  # round(Cx * self.scale + 1, 1)
         with open(paths.center_y_path, "w") as f:

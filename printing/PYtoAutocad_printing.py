@@ -233,7 +233,14 @@ class PrismBuilder:
                 f"_.ZOOM\nE\n\n",
             )
             if fillet == 0:
-                rows, columns = 30, 1
+
+                send_command_with_retry(self.acad, "SELECT\nALL\n\n_JOIN\n\n")
+                send_command_with_retry(self.acad, "ZOOM\nE\n\n")
+                send_command_with_retry(self.acad, f"-BOUNDARY\n{Ix},{Iy}\n\n")
+                send_command_with_retry(self.acad, f"_EXTRUDE\nL\n\n{sub_thickness}\n")
+                send_command_with_retry(self.acad, "UNION\nALL\n\n")
+
+                rows, columns = int(base_length_y / side_a), 1
                 row_spacing = side_a * self.scale * (rows - 1)
                 column_spacing = 1
                 send_command_with_retry(
@@ -242,7 +249,7 @@ class PrismBuilder:
                 )
 
                 send_command_with_retry(self.acad, "Explode\nALL\n\n")
-                send_command_with_retry(self.acad, "ZOOM\nE\n")
+                send_command_with_retry(self.acad, "UNION\nALL\n\n")
 
             if fillet == 1:
                 radius = 0.088  # 0.05
@@ -274,7 +281,7 @@ class PrismBuilder:
 
                 # send_command_with_retry(self.acad, f"-BOUNDARY\n{Ix},{Iy}\n\n")
                 send_command_with_retry(
-                    self.acad, f"_EXTRUDE\nALL\n\n{base_thickness}\n"
+                    self.acad, f"_EXTRUDE\nALL\n\n{sub_thickness}\n"
                 )
                 time.sleep(self.sleep_time)
                 send_command_with_retry(self.acad, "UNION\nALL\n\n")
@@ -318,7 +325,7 @@ class PrismBuilder:
                     self.acad,
                     f"FILLET\nRadius\n{radius}\nC\n{corner_x3},{corner_y3}\n{corner_x4},{corner_y4}\n",
                 )
-                rows, columns = 30, 1
+                rows, columns = int(base_length_y / side_a), 1
                 row_spacing = side_a * self.scale * (rows - 1)
                 column_spacing = 1
                 send_command_with_retry(
@@ -336,7 +343,7 @@ class PrismBuilder:
                 send_command_with_retry(self.acad, "ZOOM\nE\n\n")
 
                 send_command_with_retry(self.acad, f"-BOUNDARY\n{Ix},{Iy}\n\n")
-                send_command_with_retry(self.acad, f"_EXTRUDE\nL\n\n{base_thickness}\n")
+                send_command_with_retry(self.acad, f"_EXTRUDE\nL\n\n{sub_thickness}\n")
                 time.sleep(self.sleep_time)
                 send_command_with_retry(self.acad, "UNION\nALL\n\n")
 
@@ -386,10 +393,10 @@ class PrismBuilder:
         base_length_x = x  # 10
         base_length_y = y  # 30  # 55
         base_thickness = z  # 15
-        start_base = APoint(0, 0, 0)
+        start_base = APoint(base_length_x / 2, 0, 0)
         send_command_with_retry(
             self.acad,
-            f"_BOX\n{start_base.x - base_length_x},{start_base.y},{start_base.z}\n{start_base.x + Cx * self.scale},{start_base.y + base_length_y},{start_base.z - base_thickness}\n",
+            f"_BOX\n{start_base.x - base_length_x},{start_base.y},{start_base.z}\n{start_base.x * self.scale},{start_base.y + base_length_y},{start_base.z - base_thickness}\n",
         )
 
 
@@ -400,9 +407,9 @@ class PrismBuilder:
 
 def main():
     s = 1  # mm
-    sid_ang = [0.46 * s, 0.9 * s, 81]
-    folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202506\0621"
-    sat_name = os.path.join(folder, "prism_sat_file-print_0.46_0.9_81.SAT")
+    sid_ang = [0.6 * s, 1.2 * s, 79]
+    folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202506\0628"
+    sat_name = os.path.join(folder, "prism_sat_file-print_0.6_1.2_79.SAT")
     paths = OutputPaths(folder=folder, sat_name=sat_name)
 
     builder = PrismBuilder(scale=1)
@@ -410,12 +417,12 @@ def main():
         sid_ang,
         mode="triangle",
         paths=paths,
-        sub_length_x=1.1,
-        base_length_y=55,
-        sub_thickness=30,
-        base_length_x=10,
-        base_thickness=15,
-        fillet=1,
+        sub_length_x=0.6,
+        base_length_y=38,
+        sub_thickness=15,
+        base_length_x=11,
+        base_thickness=5,
+        fillet=0,
     )
 
 
