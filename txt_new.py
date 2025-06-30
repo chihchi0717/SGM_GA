@@ -63,7 +63,7 @@ def score_data(i):
 
 def compute_regression_score(S1, S2, A1):
     return (
-        10.1180
+        -0.0246
         + 0.217 * S1
         + 0.275 * S2
         + 0.002 * A1

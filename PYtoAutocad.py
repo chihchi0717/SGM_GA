@@ -227,8 +227,8 @@ class PrismBuilder:
                 send_command_with_retry(self.acad, "_EXTRUDE\nL\n\n1\n")
                 send_command_with_retry(self.acad, "UNION\nALL\n\n")
 
-                rows, columns = 30, 1
-                row_spacing = side_a * self.scale * (rows - 1)
+                row_spacing = 40 #side_a * self.scale * (rows - 1)
+                rows, columns = int(row_spacing*(1 / side_a))+1, 1 #30, 1
                 column_spacing = 1
 
                 send_command_with_retry(
@@ -351,6 +351,7 @@ class PrismBuilder:
                         self.acad,
                         f"FILLET\nRadius\n{radius_vertex}\nC\n{corner_x1},{corner_y1}\n{corner_x2},{corner_y2}\n",
                     )
+
                     rows, columns = 30, 1
                     row_spacing = side_a * self.scale * (rows - 1)
                     column_spacing = 1
@@ -406,7 +407,7 @@ class PrismBuilder:
             f.write(str(center_x))
 
         # 20250619
-        start_point = APoint(19, array_center_y * self.scale, 0)
+        start_point = APoint(190, array_center_y * self.scale, 0)
         send_command_with_retry(
             self.acad,
             f"_BOX\n{start_point.x},{start_point.y},{start_point.z}\n{start_point.x + light_source_length},{start_point.y + light_source_length},{start_point.z + light_source_length}\n",

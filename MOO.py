@@ -21,8 +21,8 @@ import smtplib
 from email.message import EmailMessage
 
 # === ES 參數設定 ===
-POP_SIZE = 10  # μ (親代數量)
-OFFSPRING_SIZE = POP_SIZE *7  # λ (後代數量)
+POP_SIZE = 5  # μ (親代數量)
+OFFSPRING_SIZE = POP_SIZE * 7  # λ (後代數量)
 N_GENERATIONS = 100  # 總共要執行的世代數
 
 # --- AutoCAD 建模參數 ---
@@ -30,7 +30,7 @@ BUILD_MODE = "triangle"
 BUILD_FILLET = 0
 VERTEX_RADIUS = 0.022
 INSIDE_RADIUS = 0.088
-LIGHT_SOURCE_SIZE = 0.5
+LIGHT_SOURCE_SIZE = 1
 
 # --- Fitness 評估參數 ---
 RETURN_UNIFORMITY = False
@@ -39,8 +39,8 @@ PROCESS_WEIGHT = 1
 UNI_WEIGHT = 1
 
 # 基因範圍
-SIDE_BOUND = [0.1, 1]
-ANGLE_BOUND = [50, 100]
+SIDE_BOUND = [0.088, 0.9]
+ANGLE_BOUND = [30, 120]
 
 # ES 自適應突變學習率 (n=3)
 n = 3
@@ -49,7 +49,7 @@ TAU = 1 / np.sqrt(2 * np.sqrt(n))
 SIGMA_SCALE = 2.0  # >1 會放大突變幅度
 
 # 隨機種子（固定值可重現）
-GLOBAL_SEED = 14
+GLOBAL_SEED = 17
 random.seed(GLOBAL_SEED)
 np.random.seed(GLOBAL_SEED)
 
