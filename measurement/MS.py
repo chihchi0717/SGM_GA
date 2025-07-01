@@ -52,7 +52,8 @@ def send_command(command):
     """向控制器發送命令並獲取回應"""
     command += "\r\n"
     controller_serial.write(command.encode("ascii"))
-    time.sleep(0.5)
+    # time.sleep(0.5)
+    wait_until_stop()
     response = controller_serial.read_all().decode("ascii").strip()
     return response
 
@@ -130,7 +131,8 @@ def init_stage(axis):
         move_stage(
             axis="1", direction="+", degrees=range_degree
         )  # move to -1 * lower limit
-        time.sleep(0.5)  # 等待穩定
+        # time.sleep(0.5)  # 等待穩定
+        wait_until_stop()
         measure_energy()
 
         total_steps = int(range_degree / angle_resolution) * 2
@@ -138,11 +140,12 @@ def init_stage(axis):
         for step in range(1, total_steps + 1):
 
             move_stage(axis="1", direction="-", degrees=angle_resolution)  # 旋轉控制器
-            time.sleep(1)  # 等待穩定
-            stop_stage()  # 停止控制器
+            # time.sleep(1)  # 等待穩定
+            wait_until_stop()
+            # stop_stage()  # 停止控制器
             energy = measure_energy()
 
-            current_pulse = get_current_pulse(1)
+            current_pulse = get_current_pulse(axis="1")
 
             init_results_1.append(
                 {
@@ -188,21 +191,23 @@ def init_stage(axis):
 
         print("初始化上層平台...")
         init_results_2 = []
-        angle_resolution = 0.5
+        angle_resolution = 0.2
         range_degree = 1
         move_stage(axis="2", direction="+", degrees=range_degree)  # move to -10
-        time.sleep(0.5)  # 等待穩定
+        # time.sleep(0.5)  # 等待穩定
+        wait_until_stop()
         measure_energy()
-
-        total_steps = int(1 / range_degree) * 2
+        total_steps = int(range_degree / angle_resolution) * 2
+        
         for step in range(1, total_steps + 1):
 
             move_stage(axis="2", direction="-", degrees=angle_resolution)  # 旋轉控制器
-            time.sleep(1)  # 等待穩定
-            stop_stage()  # 停止控制器
+            # time.sleep(1)  # 等待穩定
+            wait_until_stop()
+            # stop_stage()  # 停止控制器
             energy = measure_energy()
 
-            current_pulse = get_current_pulse(2)
+            current_pulse = get_current_pulse(axis="2")
 
             init_results_2.append(
                 {
@@ -253,7 +258,8 @@ def move_stage(axis, direction, degrees):
     command = f"M:{axis}{direction}P{pulses}\r\n"
     send_command(command)
     send_command("G")  # 啟動移動
-    time.sleep(0.1)  # 根據速度調整延遲
+    # time.sleep(0.1)  # 根據速度調整延遲
+    wait_until_stop()
     controller_serial.write(b"Q:\r\n")
     response = controller_serial.readline().decode("ascii").strip()
     print(f"Status response: {response}")
@@ -297,7 +303,8 @@ def send_plink_command(command):
     """向 P-LINK 發送命令並返回回應"""
     command += "\r"
     plink_serial.write(command.encode("ascii"))
-    time.sleep(0.1)
+    # time.sleep(0.1)
+    wait_until_stop()
     response = plink_serial.read_all().decode("ascii").strip()
     return response
 
@@ -369,14 +376,17 @@ def main(elevation_angle, prism_angle, degree_step, output_filename):
     wavelength()
     try:
         total_steps = 180 // degree_step
-        time.sleep(5)
+        # time.sleep(5)
+        wait_until_stop()
 
         for step in range(total_steps + 1):
             move_stage(axis="1", direction="+", degrees=degree_step)
-            time.sleep(1)
+            # time.sleep(1)
+            wait_until_stop()
             energy = measure_energy()
-            time.sleep(1)
-            stop_stage()
+            # time.sleep(1)
+            wait_until_stop()
+            # stop_stage()
             print(f"角度: {(step) * degree_step} 度, 測量能量: {energy}")
             results.append({"angle": (step) * degree_step, "energy": energy})
 
@@ -384,7 +394,8 @@ def main(elevation_angle, prism_angle, degree_step, output_filename):
         results_df.to_excel(output_filename, index=False)
         print("準備回到 Home 時的脈衝位置...")
         back2init(axis="1")
-        time.sleep(2)
+        # time.sleep(2)
+        wait_until_stop()
         back2init(axis="1")
 
     except Exception as e:
@@ -421,7 +432,7 @@ if __name__ == "__main__":
     elif args.prism_ang:
         move_stage(axis="1", direction="-", degrees=PRISM_ANGLE)
     elif args.move:
-        move_stage(axis="1", direction="-", degrees=90)
+        move_stage(axis="1", direction="+", degrees=90)
     elif args.measure:
         energy = measure_energy()
         print(f"{energy:.2f} uW")
