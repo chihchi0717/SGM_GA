@@ -5,9 +5,9 @@ from openpyxl import load_workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 
 # === 設定 ===
-excel_path = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\GA\SGM_GA\GA_population\best_param0.6_1.2_79\best_param0.6_1.2_79.xlsx"
+excel_path = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\MOO_best_param_OM[0.76, 0.9, 59]_N1.3_F2_8_4_sub0.6\best_param_template.xlsx"
 polar_angles = list(range(10, 90, 10))
-txt_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\GA\SGM_GA\GA_population\best_param0.6_1.2_79\N1.3_F2_R44_88"
+txt_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\MOO_best_param_OM[0.76, 0.9, 59]_N1.3_F2_8_4_sub0.6"
 folder = os.path.dirname(excel_path)
 filename = os.path.basename(excel_path)
 

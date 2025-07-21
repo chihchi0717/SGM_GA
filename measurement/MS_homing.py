@@ -14,15 +14,14 @@ import os
 STEP_PER_DEGREE = 400  # 每度所需脈衝數
 DEGREE_STEP = 3  # 每次旋轉角度
 
-ELEVATION_ANGLE = 70  # 設定仰角
+ELEVATION_ANGLE = 40  # 設定仰角
 PRISM_ANGLE = 90 - ELEVATION_ANGLE
 now_str = datetime.today().strftime("%Y%m%d_%H%M%S")
 OUTPUT_PATH = (
     r"C:\Users\cchih\Desktop\NTHU\MasterThesis\GA\measurement_system\ms_result"
 )
 OUTPUT_FILENAME = os.path.join(
-    OUTPUT_PATH,
-    f"{now_str}_0.31_0.61_79_01_BLP_middle-detect_ele{ELEVATION_ANGLE}.xlsx",
+    OUTPUT_PATH, f"{now_str}_0.6_1.2_79_ENGR_middle-detect_test_ele{ELEVATION_ANGLE}.xlsx"
 )
 
 # 是否顯示除錯訊息
@@ -335,6 +334,18 @@ def back2init(axis):
         print(f"❌ 無法正確回到 Home，剩餘差值 = {final_diff}")
 
 
+def homing(axis="1", direction="+"):
+    """
+    執行馬達回歸機械原點指令
+    """
+    print(f"[INFO] 執行 Homing：H:{axis}{direction}")
+    cmd = f"H:{axis}{direction}"
+    send_command(cmd)
+    send_command("G")  # 啟動 Homing
+    wait_until_stop()
+    print("[INFO] Homing 完成")
+
+
 # P-LINK 相關函數
 def send_plink_command(command, wait=0.2):
     command += "\r"
@@ -351,7 +362,7 @@ def send_plink_command(command, wait=0.2):
 
 def wavelength():
     """波長"""
-    wavelength = send_plink_command("*PWC0546")  # 546
+    wavelength = send_plink_command("*PWC0546")
     print(f"wave length response : {wavelength}")
     response = send_plink_command("*F01")
     print(f"current wave length : {response}")
@@ -498,17 +509,19 @@ if __name__ == "__main__":
     parser.add_argument("--stop", action="store_true", help="stop")
     parser.add_argument("--wavelength", action="store_true", help="wavelength")
     parser.add_argument("--back2init", action="store_true", help="回到初始脈衝位置")
+    parser.add_argument("--homing", action="store_true", help="執行 Homing")
+
     args = parser.parse_args()
     if args.init_one:
         init_stage(axis="1")
     elif args.init_two:
         init_stage(axis="2")
     elif args.ele_ang:
-        move_stage(axis="2", direction="-", degrees=ELEVATION_ANGLE)
+        move_stage(axis="2", direction="+", degrees=ELEVATION_ANGLE)
     elif args.prism_ang:
         move_stage(axis="1", direction="-", degrees=PRISM_ANGLE)
     elif args.move:
-        move_stage(axis="1", direction="-", degrees=90)
+        move_stage(axis="1", direction="-", degrees=10)
     elif args.measure:
         energy = measure_energy()
         print(f"{energy:.2f} uW")
@@ -519,6 +532,8 @@ if __name__ == "__main__":
         print(f"{wl}")
     elif args.back2init:
         back2init(axis="1")
+    elif args.homing:
+        homing(axis="1", direction="+")  # 或 "-"，根據你的設計
     else:
         main(
             elevation_angle=ELEVATION_ANGLE,

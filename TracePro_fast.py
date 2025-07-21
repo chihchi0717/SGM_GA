@@ -121,4 +121,4 @@ def tracepro_fast(path_macro, timeout=60, exe_path=None):
 
 
 # 執行
-# tracepro_fast(r"C:\Users\user\Desktop\NTHU\MasterThesis\GA\SGM_GA\Data\Sim.scm")
+# tracepro_fast(r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202507\0710\Sim.scm")

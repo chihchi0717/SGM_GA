@@ -406,10 +406,14 @@ class PrismBuilder:
 
 
 def main():
-    s = 1  # mm
-    sid_ang = [0.6 * s, 1.2 * s, 79]
-    folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202506\0628"
-    sat_name = os.path.join(folder, "prism_sat_file-print_0.6_1.2_79.SAT")
+    s1 = 5  # mm
+    s2 = 5  # mm
+    um2mm = 0.001
+
+    # sid_ang = [0.0502 * s1, 0.0355 * s2, 45]
+    sid_ang = [0.76,1.37,68]
+    folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202507\0721"
+    sat_name = os.path.join(folder, "0.76_1.37_68_0.6sub_OM.SAT")
     paths = OutputPaths(folder=folder, sat_name=sat_name)
 
     builder = PrismBuilder(scale=1)
@@ -419,7 +423,7 @@ def main():
         paths=paths,
         sub_length_x=0.6,
         base_length_y=38,
-        sub_thickness=15,
+        sub_thickness=5,
         base_length_x=11,
         base_thickness=5,
         fillet=0,

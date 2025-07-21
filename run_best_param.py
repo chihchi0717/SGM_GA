@@ -10,11 +10,15 @@ ANGLE_WEIGHTS = [1, 2, 5, 7, 5, 8.5, 1.5, 2]
 
 def main():
     # sid_ang = [0.46, 0.95, 85]
-    sid_ang = [0.46, 0.9, 81]
+    # sid_ang = [0.0502, 0.0355, 45] #liao
+    sid_ang = [0.76, 1.37, 68]
     # sid_ang = [0.48, 0.98, 85]
     # sid_ang = [0.62, 0.96, 67]
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    folder = os.path.join(base_dir, "GA_population", "best_param[0.46, 0.9, 81]_2fillet_0.66")
+    # output_dir = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\MOO_best_PS_OM[0.9, 0.9, 30]\SIM"
+    # folder = os.path.join(output_dir, "[0.9, 0.9, 30]_N1.3_F2_5_3_sub0.6)_allele")
+    output_dir = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\MOO_knee_[0.76,0.9,59]\SIM"
+    folder = os.path.join(output_dir, "[0.76, 1.37, 68](shrink)_N1.2536_F2_5_4_sub0.6")
     os.makedirs(folder, exist_ok=True)
 
     # Copy simulation macro
@@ -22,7 +26,15 @@ def main():
     shutil.copy2(scm_src, os.path.join(folder, "Sim.scm"))
 
     # Build CAD model
-    Build_model(sid_ang, mode="triangle", folder=folder)
+    Build_model(
+        sid_ang,
+        mode="triangle",
+        folder=folder,
+        fillet=2,
+        light_source_length=1,
+        radius_inside=0.055,
+        radius_vertex=0.044,
+    )
 
     # Run TracePro simulation
     tracepro_fast(os.path.join(folder, "Sim.scm"))

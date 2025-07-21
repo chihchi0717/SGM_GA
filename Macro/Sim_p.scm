@@ -8,7 +8,7 @@
     v))
 
 (define (set-prism-material)
-  (property:apply-material (entity 2) "New" "index1.2536" (gvector 0 0 0)))
+  (property:apply-material (entity 2) "New" "index1.3" (gvector 0 0 0)))
   ;;(property:apply-surface (entity 2) (list "Beamsplitter" "Default") (gvector 0 0 0) (gvector 0 0 0) (position 0 0 0) (gvector 1 0 0))
 (define (apply-source)
   (edit:add-selection (tools:face-in-body 3 (entity 1)))
@@ -36,7 +36,6 @@
   (setup-candela)
 
   ;; simulation loop parameters
-  ;; (define ang_ini -80)
   (define ang_ini 10)
   (define end 80)
   (define angle 10)
