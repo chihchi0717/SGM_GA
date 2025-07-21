@@ -55,14 +55,14 @@ for sheet_name in xls.sheet_names:
 
         column_sim = [col for col in df.columns if col.startswith("SIM_")]
         column_sim = [
-            "SIM_[0.76, 1.37, 68](shrink)_N1.3_F2_5_3_sub0.6",
+            "SIM_[0.76, 0.9, 68](shrink)_N1.3_F2_5_4_sub0.6",
             # "SIM_[0.76, 0.69, 50.21]_N1.2536_PGI02_F2_54_69_sub0.6",
             # "SIM_[0.76, 0.9, 59]_N1.3_F0",
         ]
         fig, ax1 = plt.subplots()
         ax2 = ax1.twinx()
 
-        # --- 模擬資料 ---
+        # --- 模擬資料 (改成散點圖) ---
         for i, sim_col in enumerate(column_sim):
             if sim_col not in df.columns:
                 continue
@@ -75,32 +75,9 @@ for sheet_name in xls.sheet_names:
                 continue
             y_sim_smooth = savgol_filter(y_sim, window_length=5, polyorder=3)
             peaks_sim, _ = find_peaks(y_sim_smooth)
-            color = sim_colors[i % len(sim_colors)]
-            # short_label = (
-            #     sim_col.replace("SIM_", "")
-            #     .replace("[0.0502, 0.0355, 45]_N1.3", "")
-            #     .replace("_raw", "")
-            # )
-            # 清理圖例用名稱
-            short_label = sim_col
-            if sim_col.startswith("SIM_"):
-                short_label = sim_col.split("N1.3_")[-1].replace("_raw", "")
-                short_label = (
-                    sim_col.replace("SIM_", "").replace("_N1.3", "").replace("_raw", "")
-                )
-            ax2.plot(x_sim, y_sim, label=sim_col, color=color)
 
-            # ax2.plot(x_sim, y_sim, label=f"{sim_col}_raw", color=color)
-            # ax2.plot(
-            #     x_sim, y_sim_smooth, label=f"{sim_col}_smooth", color=sim_colors[i]
-            # )
-            # ax2.scatter(
-            #     x_sim[peaks_sim],
-            #     y_sim_smooth[peaks_sim],
-            #     s=25,
-            #     color=sim_colors[i],
-            #     marker="x",
-            # )
+            # === 改用散點圖顯示 SIM，顏色為綠色 ===
+            ax2.scatter(x_sim, y_sim, label=sim_col, color="tab:green", s=20)
 
             for p in peaks_sim:
                 all_peaks.append(
