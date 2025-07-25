@@ -8,8 +8,8 @@
     v))
 
 (define (set-prism-material)
-  (property:apply-material (entity 2) "New" "index1.3" (gvector 0 0 0)))
-  ;;(property:apply-surface (entity 2) (list "Beamsplitter" "Default") (gvector 0 0 0) (gvector 0 0 0) (position 0 0 0) (gvector 1 0 0))
+  (property:apply-material (entity 2) "New" "index1.2536" (gvector 0 0 0)))
+  ;;(property:apply-surface (entity 2) (list "rough03" "New") (gvector 0 0 0) (gvector 0 0 0) (position 0 0 0) (gvector 1 0 0))
 (define (apply-source)
   (edit:add-selection (tools:face-in-body 3 (entity 1)))
   (property:apply-flux-surface-source (tools:face-in-body 3 (entity 1)) 0.3 1000 2 #f))
@@ -19,7 +19,7 @@
   (analysis:candela-up (gvector -1 0 0))
   (analysis:candela-ray-type "missed")
   (analysis:candela-symmetry "none")
-  (analysis:candela-distribution 1 #t 90 #t #f)
+  (analysis:candela-distribution 1 #f 540 #t #f)
   (analysis:candela-distribution-luminaire 180)
   (analysis:candela-distribution-max #f 0)
   (analysis:candela-distribution-min #f 0)
@@ -60,7 +60,7 @@
       ;;(file:save-as bmp_path)
       (analysis:candela-save-bmp "rectangular-distribution" rect_bmp)
       (analysis:candela-save-bmp "polar-distribution" pcd_path)  
-      (analysis:candela-save-txt "polar-distribution" txt_path 61))
+      (analysis:candela-save-txt "polar-distribution" txt_path 561))
       )
       
   ;; create completion marker

@@ -33,20 +33,24 @@ to_indices = []
 
 M = 180 # 往內縮的點數
 
+from sklearn.linear_model import LinearRegression
+
 for i in range(len(features) - 1):
     idx1 = features[i]
     idx2 = features[i + 1]
 
-    # 避免縮出去資料邊界
     idx1_adj = min(idx1 + M, idx2 - 1)
     idx2_adj = max(idx2 - M, idx1 + 1)
 
-    x1, z1 = x[idx1_adj], z_inv[idx1_adj]
-    x2, z2 = x[idx2_adj], z_inv[idx2_adj]
-    dx = x2 - x1
-    dz = z2 - z1
-    angle = degrees(atan2(dz, dx))
-    types.append("Upward" if dz > 0 else "Downward")
+    # 擬合該區間的直線斜率
+    x_seg = x[idx1_adj : idx2_adj + 1].reshape(-1, 1)
+    z_seg = z_inv[idx1_adj : idx2_adj + 1]
+
+    reg = LinearRegression().fit(x_seg, z_seg)
+    slope = reg.coef_[0]  # 擬合斜率
+    angle = degrees(atan2(slope, 1))  # 斜率與水平線夾角
+
+    types.append("Upward" if slope > 0 else "Downward")
     angles.append(abs(angle))
     from_indices.append(idx1_adj)
     to_indices.append(idx2_adj)
@@ -72,15 +76,25 @@ print("\n=== Average Angle by Slope Type ===")
 for slope_type in avg_angles.index:
     print(f"{slope_type}: {avg_angles[slope_type]:.2f}°")
 
+# === 繪圖：原始資料與擬合線 ===
+plt.figure(figsize=(12, 5))
+plt.plot(x, z, color="lightgray", linewidth=1, label="Original Profile")
+
 for idx, row in angle_df.iterrows():
+    x_fit = x[row["From"] : row["To"] + 1]
+    z_fit = z[row["From"] : row["To"] + 1]
+
+    # 線性回歸擬合再繪圖（注意用原始 z）
+    model = LinearRegression().fit(x_fit.reshape(-1, 1), z_fit)
+    z_pred = model.predict(x_fit.reshape(-1, 1))
+
     plt.plot(
-        x[row["From"] : row["To"] + 1],
-        z[row["From"] : row["To"] + 1],
-        label=f'{row["Slope Type"]} {row["Angle (°)"]:.1f}°',
+        x_fit, z_pred, label=f'{row["Slope Type"]} {row["Angle (°)"]:.1f}°', linewidth=2
     )
 
-plt.legend()
 plt.xlabel("X (μm)")
 plt.ylabel("Z (μm)")
-plt.title("Detected Slopes")
+plt.title("Slope Angle by Linear Regression")
+plt.legend()
+plt.tight_layout()
 plt.show()

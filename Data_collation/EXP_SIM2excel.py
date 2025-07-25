@@ -10,9 +10,9 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 
 # === 設定路徑 ===
-exp_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\MOO_knee_[0.76,0.9,59](shrink)\EXP"
-sim_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\MOO_knee_[0.76,0.9,59](shrink)\SIM"
-output_path = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\MOO_knee_[0.76,0.9,59](shrink)\EXP_SIM.xlsx"
+exp_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\MOO_knee_[0.76,0.9,59]\EXP"
+sim_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\MOO_knee_[0.76,0.9,59]\SIM_561"
+output_path = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\MOO_knee_[0.76,0.9,59]\SIM_561\EXP_SIM.xlsx"
 
 # === 仰角範圍 ===
 angles = list(range(10, 90, 10))
@@ -35,7 +35,7 @@ for angle in angles:
     angle_exp_files = sorted([f for f in os.listdir(exp_folder) if angle_tag in f])
 
     # === 依照試片編號（_01_, _02_）分群 ===
-    pattern = re.compile(r"_0*(\d+)_shrink")  # 擷取試片編號
+    pattern = re.compile(r"_0*(\d+)_BLP")  # 擷取試片編號
     sample_groups = defaultdict(list)
     for f in angle_exp_files:
         match = pattern.search(f)
@@ -58,11 +58,17 @@ for angle in angles:
             exp_name = f"EXP{sample_id}-{idx+1}"
             exp_values[exp_name] = df[intensity_col].values
 
-    # === 建立工作表資料框 ===
-    data = {"angle": degree_column}
+    # === 建立工作表資料框（包含 EXP_angle 與 SIM_angle）===
+    data = {}
+    if degree_column is not None:
+        data["EXP_angle"] = degree_column
+    else:
+        data["EXP_angle"] = []
+
     data.update(exp_values)
 
     # === 讀取模擬資料 ===
+    sim_angle_column = None  # 存模擬角度
     for sim_dir in sim_structures:
         polar_path = os.path.join(sim_folder, sim_dir, polar_tag)
         if os.path.exists(polar_path):
@@ -78,6 +84,8 @@ for angle in angles:
                             intensities.append(intensity)
                         except ValueError:
                             continue
+            if sim_angle_column is None:
+                sim_angle_column = degs
 
             # 拆解資料夾名稱來構建欄位名稱
             try:
@@ -87,6 +95,12 @@ for angle in angles:
                 col_name = f"SIM_{sim_dir}"
 
             data[col_name] = intensities
+
+    # 加入 SIM_angle
+    if sim_angle_column is not None:
+        data["SIM_angle"] = sim_angle_column
+    else:
+        data["SIM_angle"] = []
 
     # === 補齊欄位長度 ===
     max_len = max([len(v) for v in data.values()])
@@ -99,6 +113,7 @@ for angle in angles:
     ws = wb.create_sheet(title=angle_str)
     for r in dataframe_to_rows(df_out, index=False, header=True):
         ws.append(r)
+
 
 # === 儲存 Excel ===
 wb.save(output_path)
