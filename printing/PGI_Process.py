@@ -8,10 +8,10 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 # === 載入資料 ===
 df = pd.read_excel(
-    r"C:\Users\cchih\Desktop\20250716\20250716_clean.xlsx", sheet_name="01"
+    r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202507\0728\0.9_0.9_60_01.xlsx", sheet_name="01"
 )
-x = df["X(um)"].to_numpy()
-z = df["Z(um)"].to_numpy()
+x = df["X(mm)"].to_numpy()
+z = df["Z(nm)"].to_numpy()
 z_inv = -z  # 反轉Z，使峰變高點
 
 # === 1. 偵測波峰，計算稜鏡寬度 ===

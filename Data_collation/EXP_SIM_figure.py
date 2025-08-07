@@ -31,14 +31,14 @@ mpl.rcParams.update(
 )
 
 # === 設定 ===
-# excel_path = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\MOO_best_PS_OM[0.9, 0.9, 30]\EXP_SIM.xlsx"
-# output_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\MOO_best_PS_OM[0.9, 0.9, 30]"
-excel_path = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\MOO_knee_[0.76,0.9,59]\SIM_561\EXP_SIM.xlsx"
-output_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\MOO_knee_[0.76,0.9,59]"
+# excel_path = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\MOO_knee_[0.76,0.9,59]\SIM_561\EXP_SIM.xlsx"
+# output_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\MOO_knee_[0.76,0.9,59]\SIM_561\[0.76, 0.9, 59]_N1.2536_F2_61_53_sub0._light10"
+excel_path = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\[0.76,0.9,59]_Compensate\SIM_561\EXP_SIM.xlsx"
+output_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\[0.76,0.9,59]_Compensate\SIM_561\[0.76, 0.9, 59]_N1.2536_F2_61_53_sub0._light10"
 os.makedirs(output_folder, exist_ok=True)
 
 
-exp_columns = ["EXP1-1", "EXP2-1"]
+exp_columns = ["EXP1-1"]  # , "EXP2-1"
 # exp_colors = ["#8c1aff", "#1f77b4", "#003366"]
 
 # sim_colors = ["tab:green", "tab:orange"]
@@ -55,7 +55,7 @@ for sheet_name in xls.sheet_names:
 
         column_sim = [col for col in df.columns if col.startswith("SIM_")]
         column_sim = [
-            "SIM_[0.76, 0.9, 59]_N1.2536_F0_sub0.6",
+            "SIM_[0.76, 0.9, 59]_N1.2536_F2_61_53_sub0._light10",
             # "SIM_[0.76, 0.69, 50.21]_N1.2536_PGI02_F2_54_69_sub0.6",
             # "SIM_[0.76, 0.9, 59]_N1.3_F0",
         ]
@@ -108,15 +108,15 @@ for sheet_name in xls.sheet_names:
             y_exp_smooth = savgol_filter(y_exp, window_length=8, polyorder=3)
             peaks_exp, _ = find_peaks(y_exp_smooth)
             ax1.plot(x_exp, y_exp, label=f"{col}", color=exp_colors[idx])  # , alpha=0.3
-            # ax1.scatter(x_exp, y_exp, label=f"{col}", color=exp_colors[idx], s = 15)
+            ax1.scatter(x_exp, y_exp, label=f"{col}", color=exp_colors[idx], s=10)
             # ax1.plot(x_exp, y_exp_smooth, label=f"{col}", color=exp_colors[idx])
-            # ax1.scatter(
-            #     x_exp[peaks_exp],
-            #     y_exp_smooth[peaks_exp],
-            #     s=40,
-            #     color=exp_colors[idx],
-            #     linewidths=0.5,
-            # )
+            ax1.scatter(
+                x_exp[peaks_exp],
+                y_exp_smooth[peaks_exp],
+                s=40,
+                color=exp_colors[idx],
+                linewidths=0.5,
+            )
 
             for p in peaks_exp:
                 all_peaks.append(
@@ -159,7 +159,7 @@ for sheet_name in xls.sheet_names:
         ax1.set_ylim(bottom=0)
         ax2.set_ylim(bottom=0)
         plt.title(f"Elevation {sheet_name}° - EXP vs SIM", fontsize=12, weight="bold")
-        plt.tight_layout(pad=1.5)
+        # plt.tight_layout(pad=0.8)
 
         # 儲存圖
         save_path = os.path.join(

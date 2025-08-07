@@ -394,8 +394,9 @@ class PrismBuilder:
         base_length_y = y  # 30  # 55
         base_thickness = z  # 15
         start_base = APoint(
-            base_length_x - 0.6, 0, 0
-        )  # MS: APoint(base_length_x / 2, 0, 0) #Alpha: APoint(base_length_x - 0.6, 0, 0) # OM: APoint(base_length_x - 0.6, 0, 0)
+            Cx, 0, 0
+        )  # MS: APoint(base_length_x / 2, 0, 0) #Alpha: APoint(Cx, 0, 0) # OM: APoint(base_length_x - 0.6, 0, 0)
+
         send_command_with_retry(
             self.acad,
             f"_BOX\n{start_base.x - base_length_x},{start_base.y},{start_base.z}\n{start_base.x * self.scale},{start_base.y + base_length_y},{start_base.z - base_thickness}\n",
@@ -410,9 +411,9 @@ class PrismBuilder:
 # def main():
 #     # um2mm = 0.001
 
-#     sid_ang = [0.77,1.05,62.16]
-#     folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202507\0724"
-#     sat_name = os.path.join(folder, "0.77_1.05_62.16_0.6sub_MS.STL")
+#     sid_ang = [0.3, 0.3, 60]
+#     folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202508\0804"
+#     sat_name = os.path.join(folder, "0.3_0.3_60_0.6sub_OM.STL")
 #     paths = OutputPaths(folder=folder, sat_name=sat_name)
 
 #     builder = PrismBuilder(scale=1)
@@ -422,8 +423,8 @@ class PrismBuilder:
 #         paths=paths,
 #         sub_length_x=0.6,
 #         base_length_y=38, # MS:38
-#         sub_thickness=15,  # MS:15 # Alpha: 15 #OM:3
-#         base_length_x=11,  # MS:11 # Alpha: 5 #OM:5
+#         sub_thickness=5,  # MS:15 # Alpha: 5 #OM:3
+#         base_length_x=3,  # MS:11 # Alpha: 3 #OM:5
 #         base_thickness=5,
 #         fillet=0,
 #     )
@@ -434,16 +435,16 @@ from itertools import product
 
 def main():
     # 設定參數範圍
-    S1_values = [0.9]
-    S2_values = [0.9]
+    S1_values = [0.3, 0.6, 0.9]
+    S2_values = [0.3, 0.6, 0.9]
     A1_values = [30, 60, 90, 120, 150]
 
     # 設定輸出資料夾
-    folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202507\0725\DOE"
+    folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202508\DOE"
 
     for S1, S2, A1 in product(S1_values, S2_values, A1_values):
         sid_ang = [S1, S2, A1]
-        filename = f"{S1:.2f}_{S2:.2f}_{A1}_0.6sub_OM.STL"
+        filename = f"{S1:.2f}_{S2:.2f}_{A1}_0.6sub_ALPHA.STL"
         sat_path = os.path.join(folder, filename)
 
         paths = OutputPaths(folder=folder, sat_name=sat_path)
@@ -454,10 +455,10 @@ def main():
             mode="triangle",
             paths=paths,
             sub_length_x=0.6,
-            base_length_y=38,
-            sub_thickness=15,  # MS:15 # Alpha: 15 #OM:3
-            base_length_x=5,  # MS:11 # Alpha: 5 #OM:5
-            base_thickness=5, #MS:5
+            base_length_y=38, # MS:38
+            sub_thickness=5,  # MS:15 # Alpha: 5 #OM:3
+            base_length_x=3,  # MS:11 # Alpha: 3 #OM:5
+            base_thickness=5,
             fillet=0,
         )
 

@@ -10,9 +10,13 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 
 # === 設定路徑 ===
-exp_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\MOO_knee_[0.76,0.9,59]\EXP"
-sim_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\MOO_knee_[0.76,0.9,59]\SIM_561"
-output_path = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\MOO_knee_[0.76,0.9,59]\SIM_561\EXP_SIM.xlsx"
+# exp_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\MOO_knee_[0.76,0.9,59]\EXP"
+# sim_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\MOO_knee_[0.76,0.9,59]\SIM_561"
+# output_path = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\MOO_knee_[0.76,0.9,59]\SIM_561\EXP_SIM.xlsx"
+
+exp_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\[0.76,0.9,59]_Compensate\EXP"
+sim_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\[0.76,0.9,59]_Compensate\SIM_561"
+output_path = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\[0.76,0.9,59]_Compensate\SIM_561\EXP_SIM.xlsx"
 
 # === 仰角範圍 ===
 angles = list(range(10, 90, 10))

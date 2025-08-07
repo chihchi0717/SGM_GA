@@ -365,6 +365,8 @@ class PrismBuilder:
 
                 rows, columns = 30, 1
                 row_spacing = side_a * self.scale * (rows - 1)
+                # row_spacing = 40
+                # rows, columns = int(row_spacing * (1 / side_a)) + 1, 1  # 30, 1
                 column_spacing = 1
                 send_command_with_retry(
                     self.acad,
@@ -380,7 +382,7 @@ class PrismBuilder:
                 corner_y3 = Iy
                 corner_x4 = Ix * 0.8
                 corner_y4 = Iy + side_a - r
-                for i in range(0, 29):
+                for i in range(0, rows - 1):
                     send_command_with_retry(
                         self.acad,
                         f"FILLET\nRadius\n{radius_inside}\nC\n{corner_x3},{corner_y3+side_a*i}\n{corner_x4},{corner_y4+side_a*i}\n",
@@ -410,7 +412,7 @@ class PrismBuilder:
             raise ValueError("mode must be 'stair' or 'triangle'")
 
         actual_array_top = top + (rows - 1) * (top - bottom)
-        array_center_y = (actual_array_top) / 2  # + bottom
+        array_center_y = (actual_array_top) / 2  # (actual_array_top) / 2  # + bottom
         center_y = round(array_center_y * self.scale, 1)
         center_x = 0  # round(Cx * self.scale + 1, 1)
         with open(paths.center_y_path, "w") as f:
@@ -426,7 +428,7 @@ class PrismBuilder:
         start_point = APoint(190, array_center_y * self.scale, 0)
         send_command_with_retry(
             self.acad,
-            f"_BOX\n{start_point.x},{start_point.y},{start_point.z}\n{start_point.x + light_source_length},{start_point.y + light_source_length},{start_point.z + light_source_length}\n",
+            f"_BOX\n{start_point.x},{start_point.y},{start_point.z}\n{start_point.x + light_source_length},{start_point.y + light_source_length},{start_point.z + 1}\n",
         )
 
         send_command_with_retry(self.acad, f"save\n{paths.dwg_path}\ny\n")
