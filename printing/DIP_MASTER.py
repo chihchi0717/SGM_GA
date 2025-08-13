@@ -43,8 +43,10 @@ MIN_MAIN_SHORT_SIDE = 80
 KEEP_LEFT_SUBSTRATE = False
 
 # I/O
-input_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202508\DOE_RB"
-output_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202508\DOE_RB\0810ResultFigures"
+input_folder = (
+    r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202508\DOE_RB\0.6_0.9"
+)
+output_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202508\DOE_RB\0.6_0.9\0810ResultFigures"
 os.makedirs(output_folder, exist_ok=True)
 csv_path = os.path.join(output_folder, "batch_edge_summary.csv")
 
