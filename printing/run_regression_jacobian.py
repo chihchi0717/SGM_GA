@@ -121,6 +121,7 @@ class LinearOLS:
             J[i, :] = self.beta[y][1:]
         return J
 
+
 from sklearn.ensemble import RandomForestRegressor
 
 
@@ -775,38 +776,65 @@ def main():
         choices=["ols", "huber", "rf"],
         help="長度回歸器：ols/huber/rf",
     )
+
+    ap.add_argument(
+        "--len-huber-alpha",
+        type=float,
+        default=1e-3,
+        help="(length huber) alpha，預設 1e-3",
+    )
+    ap.add_argument(
+        "--len-huber-eps",
+        type=float,
+        default=1.35,
+        help="(length huber) epsilon，預設 1.35",
+    )
+    ap.add_argument(
+        "--len-huber-max-iter",
+        type=int,
+        default=2000,
+        help="(length huber) max_iter，預設 2000",
+    )
+    ap.add_argument(
+        "--scale-length", action="store_true", help="標準化長度模型輸入特徵"
+    )
+    # ---- 長度 RF 專用參數 ----
+    ap.add_argument(
+        "--len-rf-n-est", type=int, default=300, help="(length rf) n_estimators"
+    )
+    ap.add_argument(
+        "--len-rf-max-depth",
+        type=int,
+        default=None,
+        help="(length rf) max_depth (None=不限)",
+    )
+    ap.add_argument(
+        "--len-rf-min-leaf", type=int, default=1, help="(length rf) min_samples_leaf"
+    )
+    ap.add_argument(
+        "--len-rf-max-features",
+        type=float,
+        default=1.0,
+        help="(length rf) max_features，建議 0.6~0.9 以抑制過擬合",
+    )
+    ap.add_argument(
+        "--len-rf-criterion",
+        type=str,
+        default="squared_error",
+        choices=["squared_error", "absolute_error"],
+        help="(length rf) 分裂準則；absolute_error 對 MAE/P95 較友善",
+    )
+    # ---- 長度特徵增強 ----
     ap.add_argument(
         "--len-add-ratios",
         action="store_true",
-        help="長度模型加入比例特徵 s1/s2, s1/s3, s2/s3",
+        help="長度模型加入比例特徵：s1/s2, s1/s3, s2/s3",
     )
-    # 若也想要 sincos：ap.add_argument("--len-add-sincos", action="store_true")
-
-    ap.add_argument("--len-huber-alpha", type=float, default=1e-3,
-                    help="(length huber) alpha，預設 1e-3")
-    ap.add_argument("--len-huber-eps", type=float, default=1.35,
-                    help="(length huber) epsilon，預設 1.35")
-    ap.add_argument("--len-huber-max-iter", type=int, default=2000,
-                    help="(length huber) max_iter，預設 2000")
-    ap.add_argument("--scale-length", action="store_true",
-                    help="標準化長度模型輸入特徵")
-    # ---- 長度 RF 專用參數 ----
-    ap.add_argument("--len-rf-n-est", type=int, default=300,
-                    help="(length rf) n_estimators")
-    ap.add_argument("--len-rf-max-depth", type=int, default=None,
-                    help="(length rf) max_depth (None=不限)")
-    ap.add_argument("--len-rf-min-leaf", type=int, default=1,
-                    help="(length rf) min_samples_leaf")
-    ap.add_argument("--len-rf-max-features", type=float, default=1.0,
-                    help="(length rf) max_features，建議 0.6~0.9 以抑制過擬合")
-    ap.add_argument("--len-rf-criterion", type=str, default="squared_error",
-                    choices=["squared_error", "absolute_error"],
-                    help="(length rf) 分裂準則；absolute_error 對 MAE/P95 較友善")
-    # ---- 長度特徵增強 ----
-    ap.add_argument("--len-add-ratios", action="store_true",
-                    help="長度模型加入比例特徵：s1/s2, s1/s3, s2/s3")
-    ap.add_argument("--len-add-sincos", action="store_true",
-                    help="長度模型加入角度正弦/餘弦特徵：sin,cos(a1,a2,a3)")
+    ap.add_argument(
+        "--len-add-sincos",
+        action="store_true",
+        help="長度模型加入角度正弦/餘弦特徵：sin,cos(a1,a2,a3)",
+    )
 
     # 角度模型選擇與參數
     ap.add_argument(
@@ -830,12 +858,18 @@ def main():
         "--rf-max-depth", type=int, default=None, help="(rf) max_depth (None=不限)"
     )
     ap.add_argument("--rf-min-leaf", type=int, default=1, help="(rf) min_samples_leaf")
-    ap.add_argument("--huber-max-iter", type=int, default=2000,
-                help="(huber) max_iter, default 2000")
-    ap.add_argument("--huber-eps", type=float, default=1.35,
-                    help="(huber) epsilon, default 1.35")
-    ap.add_argument("--scale-angle", action="store_true",
-                    help="標準化角度模型的輸入特徵")
+    ap.add_argument(
+        "--huber-max-iter",
+        type=int,
+        default=2000,
+        help="(huber) max_iter, default 2000",
+    )
+    ap.add_argument(
+        "--huber-eps", type=float, default=1.35, help="(huber) epsilon, default 1.35"
+    )
+    ap.add_argument(
+        "--scale-angle", action="store_true", help="標準化角度模型的輸入特徵"
+    )
 
     ap.add_argument(
         "--add-angle-sincos", action="store_true", help="增加 sin/cos(a1,a2,a3) 特徵"
@@ -895,9 +929,12 @@ def main():
         )
     elif args.angle_model == "huber":
         model_ang = AngleModelHuber(
-            alpha=args.angle_ridge, epsilon=args.huber_eps,
-            max_iter=args.huber_max_iter, scale=args.scale_angle,
-            add_sincos=args.add_angle_sincos, add_ratios=args.add_ratios
+            alpha=args.angle_ridge,
+            epsilon=args.huber_eps,
+            max_iter=args.huber_max_iter,
+            scale=args.scale_angle,
+            add_sincos=args.add_angle_sincos,
+            add_ratios=args.add_ratios,
         )
 
     else:  # "rf"
@@ -1092,6 +1129,8 @@ def main():
                                 else "linear"
                             )
                         ],
+                        "len_add_ratios": [args.len_add_ratios],
+                        "len_add_sincos": [args.len_add_sincos],
                         "angle_model": [args.angle_model],
                         "angle_poly": [args.angle_poly],
                         "angle_ridge_or_alpha": [args.angle_ridge],
