@@ -734,10 +734,11 @@ def evaluate_loso_cv(df_used, model_builder):
     return overall_df, per_struct_df
 
 
-# ---------------- Pre-compensation ----------------
+# ---------------- Pre-compensation Solvers ----------------
 def precomp_shrink_into_original(
     J, dm2, dm3, dma3, weights=None, allow_mask=None, ridge=1e-6
 ):
+    """舊版求解器: 在成品尺寸空間 (measurement space) 進行線性求解"""
     E_s2 = np.array([0, 1, 0, 0, 0, 0], float)
     E_s3 = np.array([0, 0, 1, 0, 0, 0], float)
     A = np.vstack([E_s2 - J[0, :], E_s3 - J[1, :], J[2, :]])
@@ -767,6 +768,16 @@ def precomp_shrink_into_original(
     return dx_red
 
 
+def precomp_in_deviation_space(J, b_prime, ridge=1e-6):
+    """新版求解器: 在模型輸出空間 (deviation space) 進行線性求解"""
+    A = J
+    b = np.asarray(b_prime, dtype=float).reshape(-1, 1)
+    ATA = A.T @ A + ridge * np.eye(A.shape[1])
+    ATb = A.T @ b
+    dx = np.linalg.solve(ATA, ATb).flatten()
+    return dx
+
+
 # ---------------- CLI ----------------
 def parse_vec6(s: str) -> np.ndarray:
     vals = [float(v.strip()) for v in s.split(",")]
@@ -793,7 +804,7 @@ def main():
     ap.add_argument(
         "--add-interactions",
         action="store_true",
-        help="長度模型加入交互作用特徵 (s1*s2, s1*s3, s2*s3, a1*a2, ...)",
+        help="為長度與角度模型加入交互作用特徵",
     )
 
     # ---- 長度模型選項 ----
@@ -900,10 +911,14 @@ def main():
     )
 
     ap.add_argument(
-        "--add-angle-sincos", action="store_true", help="增加 sin/cos(a1,a2,a3) 特徵"
+        "--add-angle-sincos",
+        action="store_true",
+        help="角度模型增加 sin/cos(a1,a2,a3) 特徵",
     )
     ap.add_argument(
-        "--add-ratios", action="store_true", help="增加比例特徵 s1/s2, s1/s3, s2/s3"
+        "--add-ratios",
+        action="store_true",
+        help="角度模型增加比例特徵 s1/s2, s1/s3, s2/s3",
     )
 
     args = ap.parse_args()
@@ -978,101 +993,145 @@ def main():
 
     model_ang.fit(df_use)
 
-    # 3) Jacobian at operating point（角度用數值微分）
-    if args.jac_at:
-        xop = parse_vec6(args.jac_at)
-        print("\n[Jacobian] 使用 --jac-at 指定的操作點")
-    else:
-        xop = df_use[FEATURES].mean().to_numpy()
-        print("\n[Jacobian] 使用訓練數據的平均值作為操作點")
+    # 3) ===== 全新：迭代式事前預測補償 (Iterative Proactive Pre-compensation) =====
+    print("\n\n=== Iterative Proactive Pre-compensation (Deviation Space Strategy) ===")
 
-    J_len = model_len.local_jacobian()
-    J_ang_row = model_ang.local_jacobian_numeric(xop)
-    J = np.vstack([J_len, J_ang_row[None, :]])
-    J_df = pd.DataFrame(J, index=TARGETS, columns=FEATURES)
-
-    print("\n=== Local Jacobian (dy/dx) at operating point ===")
-    print(J_df.round(6))
-
-    # 4) ===== 全新：事前預測補償 (Proactive Pre-compensation) =====
-    print("\n\n=== Proactive Pre-compensation Workflow ===")
-
-    # 步驟 1: 定義您的「目標設計 (target_design)」, 也就是您最終想要的完美成品尺寸
+    # --- 步驟 1: 定義您的「目標設計 (target_design)」---
 
     # --- 手動設定區塊 ---
-    # 如果您有特定的目標設計，請取消以下區塊的註解 (#)，並填入您想要的6個數值。
     target_design = {
         "Design_s1(mm)": 0.42,
         "Design_s2(mm)": 0.76,
         "Design_s3(mm)": 0.76,
-        "Design_a3(deg)": 32,
-        "Design_a1(deg)": 74,
-        "Design_a2(deg)": 74,
+        "Design_a3(deg)": 32.0,
+        "Design_a1(deg)": 74.0,
+        "Design_a2(deg)": 74.0,
     }
 
-    # --- 自動設定區塊 (預設使用訓練數據的平均值) ---
-    # 如果上面手動設定區塊被註解掉，程式將會使用此預設值。
     try:
         target_design
     except NameError:
         print("\n[Info] 未手動設定 target_design，將使用訓練數據的平均值作為範例。")
         target_design = dict(df_use[FEATURES].mean())
 
-    print("\n--- Step 1: Target Design ---")
+    print("\n--- Initial Target Design ---")
     for k, v in target_design.items():
         print(f"  - {k}: {v:.6f}")
 
-    # 步驟 2: 使用模型「預測」將會發生的誤差
-    target_df = pd.DataFrame([target_design])
-    predicted_deltas = model_len.predict_df(target_df)
-    predicted_angle = model_ang.predict_df(target_df)
+    # --- 迭代控制器 ---
+    num_steps = 80
+    step_size = 0.01
 
-    pred_ds2_frac = predicted_deltas["delta_s2"].iloc[0]
-    pred_ds3_frac = predicted_deltas["delta_s3"].iloc[0]
-    pred_ma3 = predicted_angle["DIP_a3(deg)"].iloc[0]
+    current_design = target_design.copy()
 
-    print("\n--- Step 2: Predicted Deviations (if using target as design) ---")
-    print(f"  - Predicted s2 shrinkage: {pred_ds2_frac:.4f} ({pred_ds2_frac*100:.2f}%)")
-    print(f"  - Predicted s3 shrinkage: {pred_ds3_frac:.4f} ({pred_ds3_frac*100:.2f}%)")
-    print(f"  - Predicted final angle: {pred_ma3:.4f} degrees")
-
-    # 步驟 3: 計算需要補償的目標誤差 `b`
-    m2_predicted_actual = target_design["Design_s2(mm)"] * (1 - pred_ds2_frac)
-    m3_predicted_actual = target_design["Design_s3(mm)"] * (1 - pred_ds3_frac)
-
-    dm2 = target_design["Design_s2(mm)"] - m2_predicted_actual
-    dm3 = target_design["Design_s3(mm)"] - m3_predicted_actual
-    dma3 = target_design["Design_a3(deg)"] - pred_ma3
-
-    print("\n--- Step 3: Calculated Error to Compensate ---")
-    print(f"  - Required change in m2 (dm2): {dm2:.6f} mm")
-    print(f"  - Required change in m3 (dm3): {dm3:.6f} mm")
-    print(f"  - Required change in ma3 (dma3): {dma3:.6f} degrees")
-
-    # 步驟 4: 求解並應用補償量 Δx
-    # (注意: Jacobian 應該在目標點計算，以獲得最準確的線性近似)
-    J_ang_row_target = model_ang.local_jacobian_numeric(
-        np.array(list(target_design.values()))
+    print(
+        f"\n[Info] Starting iterative compensation with {num_steps} steps (step_size={step_size})..."
     )
-    J_target = np.vstack([model_len.local_jacobian(), J_ang_row_target[None, :]])
 
-    dx = precomp_shrink_into_original(J_target, dm2, dm3, dma3)
+    # --- 迭代迴圈 ---
+    for i in range(num_steps):
+        print(f"\n--- Iteration {i+1}/{num_steps} ---")
 
-    print("\n--- Step 4: Calculated Compensation Vector (Δx) ---")
-    print("Order:", FEATURES)
-    print(np.round(dx, 6))
+        current_df = pd.DataFrame([current_design])
+        current_vec = current_df[FEATURES].to_numpy().flatten()
+        print("  Current Design:", {k: f"{v:.4f}" for k, v in current_design.items()})
 
-    # 步驟 5: 產出最終的「補償後設計」
-    compensated_design = {
-        k: (v + dx_val) for (k, v), dx_val in zip(target_design.items(), dx)
-    }
+        # 步驟 2: 從「當前設計」預測其收縮率/角度
+        predicted_deltas = model_len.predict_df(current_df)
+        predicted_angle = model_ang.predict_df(current_df)
 
-    print("\n--- Step 5: Final Compensated Design to Manufacture ---")
+        pred_ds2_frac = predicted_deltas["delta_s2"].iloc[0]
+        pred_ds3_frac = predicted_deltas["delta_s3"].iloc[0]
+        pred_ma3 = predicted_angle["DIP_a3(deg)"].iloc[0]
+
+        # 步驟 3: 計算「理想收縮率」與「預測收縮率」的差距
+        # 理想收縮率 d_target 滿足: current_design * (1 - d_target) = target_design
+        eps = 1e-9
+        target_ds2_frac = 1 - (
+            target_design["Design_s2(mm)"] / (current_design["Design_s2(mm)"] + eps)
+        )
+        target_ds3_frac = 1 - (
+            target_design["Design_s3(mm)"] / (current_design["Design_s3(mm)"] + eps)
+        )
+
+        # 誤差向量 b' (在偏差空間中)
+        error_ds2 = target_ds2_frac - pred_ds2_frac
+        error_ds3 = target_ds3_frac - pred_ds3_frac
+        error_a3 = target_design["Design_a3(deg)"] - pred_ma3
+        b_prime = [error_ds2, error_ds3, error_a3]
+
+        # 步驟 4: 在「當前點」計算雅可比矩陣 J，並求解 Δx
+        J_ang_row_current = model_ang.local_jacobian_numeric(current_vec)
+        J_current = np.vstack([model_len.local_jacobian(), J_ang_row_current[None, :]])
+
+        # 使用新的求解器 precomp_in_deviation_space
+        dx_full = precomp_in_deviation_space(J_current, b_prime)
+
+        # 步驟 5: 只往前走一小步
+        step_to_take = step_size * dx_full
+
+        # 步驟 6: 更新設計，準備下一次迭代
+        current_design = {
+            k: v + step for (k, v), step in zip(current_design.items(), step_to_take)
+        }
+
+    # --- 最終結果 ---
+    compensated_design = current_design
+    print("\n\n--- Final Compensated Design (after iterations) ---")
     for k, v in compensated_design.items():
         print(f"  - {k}: {v:.6f}")
 
+    # --- 步驟 7: (驗證) 將補償後的設計代入模型，檢視最終預測結果 ---
+    print("\n\n--- Step 7: Verification of the Final Design ---")
+    print(
+        "Now we take the compensated design and run it through the models one last time..."
+    )
+
+    compensated_df = pd.DataFrame([compensated_design])
+
+    # 預測補償後設計的收縮量
+    final_predicted_deltas = model_len.predict_df(compensated_df)
+    final_predicted_angle = model_ang.predict_df(compensated_df)
+
+    final_pred_ds2_frac = final_predicted_deltas["delta_s2"].iloc[0]
+    final_pred_ds3_frac = final_predicted_deltas["delta_s3"].iloc[0]
+    final_pred_ma3 = final_predicted_angle["DIP_a3(deg)"].iloc[0]
+
+    print("\n  - Predicted Shrinkage for Compensated Design:")
+    print(
+        f"    - s2 shrinkage: {final_pred_ds2_frac:.4f} ({final_pred_ds2_frac*100:.2f}%)"
+    )
+    print(
+        f"    - s3 shrinkage: {final_pred_ds3_frac:.4f} ({final_pred_ds3_frac*100:.2f}%)"
+    )
+    print(f"    - final angle: {final_pred_ma3:.4f} degrees")
+
+    # 計算最終預測的成品尺寸
+    final_s2 = compensated_design["Design_s2(mm)"] * (1 - final_pred_ds2_frac)
+    final_s3 = compensated_design["Design_s3(mm)"] * (1 - final_pred_ds3_frac)
+    final_a3 = final_pred_ma3
+
+    print(
+        "\n  - Final Predicted Dimensions (Compensated Design + Predicted Shrinkage):"
+    )
+    print(f"    - s2: {final_s2:.6f} mm")
+    print(f"    - s3: {final_s3:.6f} mm")
+    print(f"    - a3: {final_a3:.6f} degrees")
+
+    print("\n  - Comparison with Original Target:")
+    print(
+        f"    - Target s2: {target_design['Design_s2(mm)']:.6f}  |  Achieved s2: {final_s2:.6f}"
+    )
+    print(
+        f"    - Target s3: {target_design['Design_s3(mm)']:.6f}  |  Achieved s3: {final_s3:.6f}"
+    )
+    print(
+        f"    - Target a3: {target_design['Design_a3(deg)']:.6f}  |  Achieved a3: {final_a3:.6f}"
+    )
+
     # 構造便捷 builder，供 K-fold/LOSO 重新訓練
     def builder(df_tr):
+        # ... (builder 函式內容維持不變) ...
         if args.length_model == "ols":
             mdl_len = LinearOLS(ridge=1e-9)
         elif args.length_model == "huber":
@@ -1083,6 +1142,7 @@ def main():
                 scale=args.scale_length,
                 add_ratios=getattr(args, "len_add_ratios", False),
                 add_sincos=getattr(args, "len_add_sincos", False),
+                add_interactions=getattr(args, "add_interactions", False),
             )
         elif args.length_model == "rf":
             mdl_len = LengthModelRF(
@@ -1093,6 +1153,7 @@ def main():
                 add_sincos=getattr(args, "len_add_sincos", False),
                 max_features=getattr(args, "len_rf_max_features", 1.0),
                 criterion=getattr(args, "len_rf_criterion", "squared_error"),
+                add_interactions=getattr(args, "add_interactions", False),
             )
         else:
             raise ValueError(f"Unknown --length-model: {args.length_model}")
@@ -1115,6 +1176,7 @@ def main():
                 add_ratios=args.add_ratios,
             )
         else:  # "rf"
+            # 【修正後的程式碼】
             mdl_ang = AngleModelRF(
                 n_estimators=args.rf_n_est,
                 max_depth=args.rf_max_depth,
@@ -1159,7 +1221,8 @@ def main():
             with pd.ExcelWriter(args.save_report) as xl:
                 overall.to_excel(xl, index=False, sheet_name="overall")
                 per_struct.to_excel(xl, index=False, sheet_name="per_structure")
-                J_df.to_excel(xl, sheet_name="jacobian_at_op")
+                # J_df is at a single operating point, may not be as relevant for iterative
+                # J_df.to_excel(xl, sheet_name="jacobian_at_op")
                 if cv_df is not None:
                     cv_df.to_excel(xl, index=False, sheet_name="kfold_cv")
                 if loso_overall is not None:
@@ -1214,5 +1277,3 @@ if __name__ == "__main__":
     except Exception:
         pass
     main()
-
-# python run_regression_jacobian_g.py --file "C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202508\DOE_RB\0.6_0.9\results_analyzed_final\analysis_results -copy.xlsx" --average --eval --cv 5 --length-model huber --len-huber-alpha 1 --len-huber-eps 1 --len-huber-max-iter 1000 --scale-length  --len-add-sincos --angle-model huber --add-ratios --add-angle-sincos --scale-angle --angle-ridge  0.000001 --huber-max-iter 1000 --save-report "C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202508\DOE_RB\0.6_0.9\model_report.xlsx"
