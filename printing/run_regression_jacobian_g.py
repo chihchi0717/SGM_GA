@@ -983,81 +983,95 @@ def main():
         xop = parse_vec6(args.jac_at)
         print("\n[Jacobian] 使用 --jac-at 指定的操作點")
     else:
-        xop = np.array([0.76, 0.90, 0.826455, 52.021592, 59.0, 68.978408], dtype=float)
-        print("\n[Jacobian] 使用預設示範設計作為操作點")
+        xop = df_use[FEATURES].mean().to_numpy()
+        print("\n[Jacobian] 使用訓練數據的平均值作為操作點")
 
-    J_len = model_len.local_jacobian()  # 2x6
-    J_ang_row = model_ang.local_jacobian_numeric(xop)  # (6,)
-    J = np.vstack([J_len, J_ang_row[None, :]])  # 3x6
+    J_len = model_len.local_jacobian()
+    J_ang_row = model_ang.local_jacobian_numeric(xop)
+    J = np.vstack([J_len, J_ang_row[None, :]])
     J_df = pd.DataFrame(J, index=TARGETS, columns=FEATURES)
 
     print("\n=== Local Jacobian (dy/dx) at operating point ===")
     print(J_df.round(6))
 
-    # 4) 示範預測
-    row0 = df_use[FEATURES].dropna().iloc[0]
-    demo = pd.concat(
-        [
-            model_len.predict_df(row0.to_frame().T),
-            model_ang.predict_df(row0.to_frame().T),
-        ],
-        axis=1,
+    # 4) ===== 全新：事前預測補償 (Proactive Pre-compensation) =====
+    print("\n\n=== Proactive Pre-compensation Workflow ===")
+
+    # 步驟 1: 定義您的「目標設計 (target_design)」, 也就是您最終想要的完美成品尺寸
+
+    # --- 手動設定區塊 ---
+    # 如果您有特定的目標設計，請取消以下區塊的註解 (#)，並填入您想要的6個數值。
+    target_design = {
+        "Design_s1(mm)": 0.42,
+        "Design_s2(mm)": 0.85,
+        "Design_s3(mm)": 0.9,
+        "Design_a3(deg)": 28,
+        "Design_a1(deg)": 83,
+        "Design_a2(deg)": 69.0,
+    }
+
+    # --- 自動設定區塊 (預設使用訓練數據的平均值) ---
+    # 如果上面手動設定區塊被註解掉，程式將會使用此預設值。
+    try:
+        target_design
+    except NameError:
+        print("\n[Info] 未手動設定 target_design，將使用訓練數據的平均值作為範例。")
+        target_design = dict(df_use[FEATURES].mean())
+
+    print("\n--- Step 1: Target Design ---")
+    for k, v in target_design.items():
+        print(f"  - {k}: {v:.6f}")
+
+    # 步驟 2: 使用模型「預測」將會發生的誤差
+    target_df = pd.DataFrame([target_design])
+    predicted_deltas = model_len.predict_df(target_df)
+    predicted_angle = model_ang.predict_df(target_df)
+
+    pred_ds2_frac = predicted_deltas["delta_s2"].iloc[0]
+    pred_ds3_frac = predicted_deltas["delta_s3"].iloc[0]
+    pred_ma3 = predicted_angle["DIP_a3(deg)"].iloc[0]
+
+    print("\n--- Step 2: Predicted Deviations (if using target as design) ---")
+    print(f"  - Predicted s2 shrinkage: {pred_ds2_frac:.4f} ({pred_ds2_frac*100:.2f}%)")
+    print(f"  - Predicted s3 shrinkage: {pred_ds3_frac:.4f} ({pred_ds3_frac*100:.2f}%)")
+    print(f"  - Predicted final angle: {pred_ma3:.4f} degrees")
+
+    # 步驟 3: 計算需要補償的目標誤差 `b`
+    m2_predicted_actual = target_design["Design_s2(mm)"] * (1 - pred_ds2_frac)
+    m3_predicted_actual = target_design["Design_s3(mm)"] * (1 - pred_ds3_frac)
+
+    dm2 = target_design["Design_s2(mm)"] - m2_predicted_actual
+    dm3 = target_design["Design_s3(mm)"] - m3_predicted_actual
+    dma3 = target_design["Design_a3(deg)"] - pred_ma3
+
+    print("\n--- Step 3: Calculated Error to Compensate ---")
+    print(f"  - Required change in m2 (dm2): {dm2:.6f} mm")
+    print(f"  - Required change in m3 (dm3): {dm3:.6f} mm")
+    print(f"  - Required change in ma3 (dma3): {dma3:.6f} degrees")
+
+    # 步驟 4: 求解並應用補償量 Δx
+    # (注意: Jacobian 應該在目標點計算，以獲得最準確的線性近似)
+    J_ang_row_target = model_ang.local_jacobian_numeric(
+        np.array(list(target_design.values()))
     )
-    print("\n=== Predict on first row of data used ===")
-    print({k: float(demo.iloc[0][k]) for k in TARGETS})
+    J_target = np.vstack([model_len.local_jacobian(), J_ang_row_target[None, :]])
 
-    # 5) 預補償示範
-    # 1. 定義現況：設計值是多少？實際量測誤差是多少？
-    s2_design = 0.900000  # 單位: mm
-    s3_design = 0.826455  # 單位: mm
-    a3_design = 52.021592  # 單位: 度
+    dx = precomp_shrink_into_original(J_target, dm2, dm3, dma3)
 
-    # 觀測到的收縮率 (fractional error) 和角度量測值
-    delta_s2_meas_fraction = 0.16  # 代表 s2 收縮了 16%
-    delta_s3_meas_fraction = 0.16  # 代表 s3 收縮了 16%
-    ma3_meas = 58.6  # 最終量測到的角度
-
-    # 根據收縮率計算出實際的成品尺寸
-    m2_actual = s2_design * (
-        1 - delta_s2_meas_fraction
-    )  # 正確的計算: 0.9 * 0.84 = 0.756 mm
-    m3_actual = s3_design * (1 - delta_s3_meas_fraction)
-    # ma3_actual 就是 ma3_meas
-
-    # 2. 定義目標：我們希望成品的尺寸改變多少？
-    # 目標改變量 = 理想設計值 - 實際量測值
-    dm2 = s2_design - m2_actual  # 我們希望 s2 增加的 mm 量
-    dm3 = s3_design - m3_actual  # 我們希望 s3 增加的 mm 量
-    dma3 = a3_design - ma3_meas  # 我們希望 a3 改變的角度
-
-    # 3. 求解：計算需要對「設計參數」做出的調整量 Δx
-    # precomp_shrink_into_original 函數本身的核心數學是正確的，
-    # 它能根據目標改變量 (dm2, dm3, dma3)，反解出設計調整量 Δx。
-    dx = precomp_shrink_into_original(J, dm2, dm3, dma3, weights=None, allow_mask=None)
-
-    # 4. 驗證
-    # ... 驗證步驟 ...
-    print("\n=== Pre-compensation Δx (Design variables order) ===")
+    print("\n--- Step 4: Calculated Compensation Vector (Δx) ---")
     print("Order:", FEATURES)
     print(np.round(dx, 6))
-    orig = dict(zip(FEATURES, xop))
-    comp = {k: (orig[k] + v) for k, v in zip(FEATURES, dx)}
-    print("\n=== Compensated design (orig + Δx) ===")
-    for k in FEATURES:
-        print(f"{k}: {comp[k]:.6f}")
 
-    # 6) 驗證（線性化）
-    E_s2 = np.array([0, 1, 0, 0, 0, 0], float)
-    E_s3 = np.array([0, 0, 1, 0, 0, 0], float)
-    A = np.vstack([E_s2 - J[0, :], E_s3 - J[1, :], J[2, :]])
-    b = np.array([dm2, dm3, dma3], float).reshape(-1, 1)
-    dm_lin = (A @ dx.reshape(-1, 1)).flatten()
-    print("\n=== Linearized verification (Δm2, Δm3, Δma3) ===")
-    print("achieved ≈", np.round(dm_lin, 6))
-    print("desired  =", [round(dm2, 6), round(dm3, 6), round(dma3, 6)])
+    # 步驟 5: 產出最終的「補償後設計」
+    compensated_design = {
+        k: (v + dx_val) for (k, v), dx_val in zip(target_design.items(), dx)
+    }
+
+    print("\n--- Step 5: Final Compensated Design to Manufacture ---")
+    for k, v in compensated_design.items():
+        print(f"  - {k}: {v:.6f}")
 
     # 構造便捷 builder，供 K-fold/LOSO 重新訓練
-    # === 交叉驗證 builder(df_tr) 內建立長度模型（要與 main() 一致！）===
     def builder(df_tr):
         if args.length_model == "ols":
             mdl_len = LinearOLS(ridge=1e-9)
@@ -1069,7 +1083,6 @@ def main():
                 scale=args.scale_length,
                 add_ratios=getattr(args, "len_add_ratios", False),
                 add_sincos=getattr(args, "len_add_sincos", False),
-                add_interactions=getattr(args, "add_interactions", False),
             )
         elif args.length_model == "rf":
             mdl_len = LengthModelRF(
@@ -1080,13 +1093,11 @@ def main():
                 add_sincos=getattr(args, "len_add_sincos", False),
                 max_features=getattr(args, "len_rf_max_features", 1.0),
                 criterion=getattr(args, "len_rf_criterion", "squared_error"),
-                add_interactions=getattr(args, "add_interactions", False),
             )
         else:
             raise ValueError(f"Unknown --length-model: {args.length_model}")
         mdl_len.fit(df_tr)
 
-        # ---- 角度模型（補齊與 main() 同步的參數）----
         if args.angle_model == "ols":
             mdl_ang = AngleModelOLS(
                 degree=args.angle_poly,
@@ -1117,7 +1128,7 @@ def main():
 
     # 7) 評估 & 報告
     if args.eval or (args.cv and args.cv != "0") or args.save_report:
-        print("\n=== Model evaluation ===")
+        print("\n\n=== Model evaluation ===")
         overall = evaluate_overall(df_use, model_len, model_ang)
         print("\n-- Overall (train set) --")
         print(overall.round(4))
@@ -1130,14 +1141,12 @@ def main():
         loso_overall = None
         loso_detail = None
 
-        # K-fold
         if args.cv.isdigit() and int(args.cv) > 1:
             k = int(args.cv)
             cv_df = evaluate_kfold_cv(df_use, k=k, model_builder=builder)
             print(f"\n-- {k}-fold CV --")
             print(cv_df.round(4))
 
-        # LOSO
         elif args.cv.strip().lower() == "loso":
             print("\n-- Leave-One-Structure-Out (LOSO) CV --")
             loso_overall, loso_detail = evaluate_loso_cv(df_use, model_builder=builder)
