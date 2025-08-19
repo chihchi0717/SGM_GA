@@ -1,25 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-run_regression_jacobian.py
-- 長度：線性 OLS
-- 角度：可選 ols(多項式+ridge) / rf(RandomForest) / huber
-- 特徵：可選加入 sin/cos(a1,a2,a3) 與 邊長比例特徵 (s1/s2, s1/s3, s2/s3)
-- Jacobian：長度用解析、角度用數值微分（中央差分）
-- 驗證：--cv {K|loso}
-- 報告：--save-report，角度會重點列出 MAE / P95（同時仍提供 R2 以便對照）
-- 預補償：量測域線性化 AΔx≈b
-
-建議用法
-  # 角度改用 RF + sin/cos + ratios + LOSO（最貼近新幾何情境）
-  python run_regression_jacobian.py --file "analysis_results0814.xlsx" --average --eval --cv loso --angle-model rf --add-angle-sincos --add-ratios --save-report "model_report.xlsx"
-
-  # 5-fold，RF + sin/cos
-  python run_regression_jacobian.py --file "analysis_results0814.xlsx" --average --eval --cv 5 --angle-model rf --add-angle-sincos
+run_regression_jacobian.py (Geometrically Constrained Version)
+- This version incorporates user-defined geometric constraints to ensure
+  that the compensated design is physically valid.
+- The iterative compensation now adjusts the 3 independent variables (s2, s3, a3)
+  and re-computes the 3 dependent variables (s1, a1, a2) at each step.
 """
 
 import argparse
 import numpy as np
 import pandas as pd
+import math
 from typing import Optional, Dict, List
 
 from sklearn.preprocessing import PolynomialFeatures
@@ -36,7 +27,47 @@ FEATURES = [
     "Design_a1(deg)",
     "Design_a2(deg)",
 ]
-TARGETS = ["delta_s2", "delta_s3", "DIP_a3(deg)"]
+TARGETS = ["delta_s2", "delta_s3", "delta_a3"]
+
+
+# ---------------- NEW: Geometric Constraint Function ----------------
+def apply_geometric_constraints(design_dict: dict) -> dict:
+    """
+    Applies the user-defined geometric rules to calculate dependent variables
+    (s1, a1, a2) from the independent variables (s2, s3, a3).
+    """
+    s2 = design_dict["Design_s2(mm)"]
+    s3 = design_dict["Design_s3(mm)"]
+    a3_deg = design_dict["Design_a3(deg)"]
+    a3_rad = math.radians(a3_deg)
+
+    # Rule 1: Law of Cosines to find s1
+    # s1^2 = s2^2 + s3^2 - 2*s2*s3*cos(a1_deg) <- This assumes a1 is between s2 and s3
+    # The user provided s1 = sqrt(s3^2 + s2^2 - 2*s3*s2*cos(a3))
+    # This implies a3 is the angle between s2 and s3. We will follow this rule.
+    s1_squared = s3**2 + s2**2 - 2 * s3 * s2 * math.cos(a3_rad)
+    s1 = math.sqrt(max(0, s1_squared))  # Ensure non-negative before sqrt
+
+    # Rule 2: Law of Cosines to find a1
+    # Clamp the argument for acos to [-1, 1] to avoid math domain errors
+    cos_a1_arg = (s2**2 + s1**2 - s3**2) / (2 * s2 * s1 + 1e-9)
+    cos_a1_arg = max(-1.0, min(1.0, cos_a1_arg))
+    a1_rad = math.acos(cos_a1_arg)
+    a1_deg = math.degrees(a1_rad)
+
+    # Rule 3: Sum of angles is 180 degrees
+    a2_deg = 180 - a1_deg - a3_deg
+
+    # Create a new dictionary with the updated, constrained values
+    constrained_design = {
+        "Design_s1(mm)": s1,
+        "Design_s2(mm)": s2,
+        "Design_s3(mm)": s3,
+        "Design_a3(deg)": a3_deg,
+        "Design_a1(deg)": a1_deg,
+        "Design_a2(deg)": a2_deg,
+    }
+    return constrained_design
 
 
 # ---------------- Averaging ----------------
@@ -59,16 +90,11 @@ def augment_feats_for_lengths(
     return_names: bool = False,
     add_interactions: bool = False,
 ):
-    """
-    X: shape (n,6) 對應 FEATURES = [s1,s2,s3,a3,a1,a2]（角度為度）
-    回傳: X_aug 或 (X_aug, names)
-    """
     import numpy as np
 
     s1, s2, s3, a3, a1, a2 = X[:, 0], X[:, 1], X[:, 2], X[:, 3], X[:, 4], X[:, 5]
     feats = [s1, s2, s3, a3, a1, a2]
     names = ["s1", "s2", "s3", "a3", "a1", "a2"]
-
     if add_ratios:
         eps = 1e-9
         r12 = s1 / np.clip(s2, eps, None)
@@ -76,7 +102,6 @@ def augment_feats_for_lengths(
         r23 = s2 / np.clip(s3, eps, None)
         feats += [r12, r13, r23]
         names += ["r12", "r13", "r23"]
-
     if add_sincos:
         rad1, rad2, rad3 = np.deg2rad(a1), np.deg2rad(a2), np.deg2rad(a3)
         feats += [
@@ -88,14 +113,14 @@ def augment_feats_for_lengths(
             np.cos(rad3),
         ]
         names += ["sin_a1", "cos_a1", "sin_a2", "cos_a2", "sin_a3", "cos_a3"]
-    if add_interactions:  # <--- 新增交互作用
+    if add_interactions:
         inter_terms = [
             s1 * s2,
             s1 * s3,
-            s2 * s3,  # 邊長交互
+            s2 * s3,
             a1 * a2,
             a1 * a3,
-            a2 * a3,  # 角度交互
+            a2 * a3,
         ]
         inter_names = ["s1*s2", "s1*s3", "s2*s3", "a1*a2", "a1*a3", "a2*a3"]
         feats += inter_terms
@@ -137,9 +162,6 @@ class LinearOLS:
         return J
 
 
-from sklearn.ensemble import RandomForestRegressor
-
-
 class LengthModelRF:
     def __init__(
         self,
@@ -157,7 +179,6 @@ class LengthModelRF:
         self.add_sincos = bool(add_sincos)
         self.add_interactions = bool(add_interactions)
 
-        # 注意：這裡才把 max_features / criterion 傳進 RF
         self.model_s2 = RandomForestRegressor(
             n_estimators=n_estimators,
             max_depth=max_depth,
@@ -209,28 +230,6 @@ class LengthModelRF:
         return np.zeros((2, 6))
 
 
-import numpy as np
-import pandas as pd
-from sklearn.linear_model import HuberRegressor
-from sklearn.preprocessing import StandardScaler
-
-# 需與主程式一致
-FEATURES = [
-    "Design_s1(mm)",
-    "Design_s2(mm)",
-    "Design_s3(mm)",
-    "Design_a3(deg)",
-    "Design_a1(deg)",
-    "Design_a2(deg)",
-]
-
-import numpy as np
-import pandas as pd
-from sklearn.linear_model import HuberRegressor
-from sklearn.preprocessing import StandardScaler
-from itertools import combinations
-
-
 class LengthModelHuber:
     """
     以 Huber 擬合 delta_s2、delta_s3
@@ -267,7 +266,6 @@ class LengthModelHuber:
         self._aug_names: list[str] | None = None
         self._ref_point_: np.ndarray | None = None  # 訓練集均值(原始6維)
 
-    # ---- 內部：增強 + （可選）標準化 ----
     def _augment(self, X_raw: np.ndarray, fit_names: bool = False) -> np.ndarray:
         if fit_names or (self._aug_names is None):
             X_aug, names = augment_feats_for_lengths(
@@ -299,7 +297,6 @@ class LengthModelHuber:
 
     def fit(self, df: pd.DataFrame):
         X_aug = self._prepare_X(df, fit=True)
-        # For Jacobian chain rule, we need the mean of the original features
         self._ref_point_ = df[FEATURES].to_numpy(dtype=float).mean(axis=0)
 
         y2 = df["delta_s2"].to_numpy(dtype=float)
@@ -317,7 +314,6 @@ class LengthModelHuber:
             {"delta_s2": pred_s2, "delta_s3": pred_s3}, index=df_design.index
         )
 
-    # ---- 內部：aug特徵對原始6維的雅可比 D (n_aug x 6) 於某點 x_raw ----
     def _aug_jac_wrt_base(self, x_raw: np.ndarray) -> np.ndarray:
         assert self._aug_names is not None, "Aug names not set; call fit() first."
         s1, s2, s3, a3, a1, a2 = x_raw.tolist()
@@ -364,37 +360,30 @@ class LengthModelHuber:
             elif name == "cos_a3":
                 v[3] = -np.sin(a3 * deg2rad) * deg2rad
             rows.append(v)
-        return np.vstack(rows)  # (n_aug x 6)
+        return np.vstack(rows)
 
-    # 核心：在某參考點，將「aug域係數」轉成「原始6維」的 Jacobian
     def _jac_at_point(self, x_raw: np.ndarray) -> np.ndarray:
-        # 取出 Huber 線性係數（若有標準化，除以 std）
         def _coef_on_raw(model):
             if self.scale and (self.scaler is not None):
                 std = self.scaler.scale_.astype(float)
                 std = np.where(std == 0, 1.0, std)
-                return model.coef_.astype(float) / std  # shape (n_aug,)
+                return model.coef_.astype(float) / std
             return model.coef_.astype(float)
 
-        g2_aug = _coef_on_raw(self.model_s2).ravel()  # dy2/d(aug)
-        g3_aug = _coef_on_raw(self.model_s3).ravel()  # dy3/d(aug)
+        g2_aug = _coef_on_raw(self.model_s2).ravel()
+        g3_aug = _coef_on_raw(self.model_s3).ravel()
 
-        D = self._aug_jac_wrt_base(x_raw)  # d(aug)/d(base)  (n_aug x 6)
-        dy2_dx = D.T @ g2_aug  # shape (6,)
-        dy3_dx = D.T @ g3_aug  # shape (6,)
-        J = np.vstack([dy2_dx, dy3_dx])  # (2 x 6)
+        D = self._aug_jac_wrt_base(x_raw)
+        dy2_dx = D.T @ g2_aug
+        dy3_dx = D.T @ g3_aug
+        J = np.vstack([dy2_dx, dy3_dx])
         return J
 
     def local_jacobian(self) -> np.ndarray:
-        """
-        若 add_ratios/sincos=False：退化為線性(標準化)係數對應的常數梯度。
-        若 add_* = True：在訓練集均值 self._ref_point_ 評估鏈式 Jacobian。
-        """
         if self.add_ratios or self.add_sincos:
             if self._ref_point_ is None:
                 raise RuntimeError("Model must be fit() before computing Jacobian.")
             return self._jac_at_point(self._ref_point_)
-        # 無增強：與舊版一致
         if self.scale and (self.scaler is not None):
             std = self.scaler.scale_.astype(float)
             std = np.where(std == 0, 1.0, std)
@@ -403,16 +392,11 @@ class LengthModelHuber:
         else:
             g2 = self.model_s2.coef_.astype(float).ravel()
             g3 = self.model_s3.coef_.astype(float).ravel()
-        # 只取前6個(原始6維)，避免萬一增強名單不同步
         g2 = g2[: len(FEATURES)]
         g3 = g3[: len(FEATURES)]
         return np.vstack([g2, g3])
 
-    # (選用) 若你想在特定設計點算 Jacobian，可呼叫這個
     def local_jacobian_at(self, x_raw: np.ndarray) -> np.ndarray:
-        """
-        x_raw: 長度6的一維 ndarray/list，順序對應 FEATURES
-        """
         x_raw = np.asarray(x_raw, dtype=float).ravel()
         if x_raw.shape[0] != len(FEATURES):
             raise ValueError(f"x_raw must have length {len(FEATURES)}")
@@ -421,22 +405,12 @@ class LengthModelHuber:
 
 # ---------------- Angle model base (feature augmentation) ----------------
 class AngleModelBase:
-    """
-    提供統一的特徵增維：
-      - add_sincos: 針對 a1,a2,a3 產生 sin/cos
-      - add_ratios: 產生 s1/s2, s1/s3, s2/s3（避免除零）
-    子類別需實作：
-      - fit(df)
-      - predict_df(df_design) -> DataFrame({"DIP_a3(deg)": ...})
-    """
-
     def __init__(self, add_sincos: bool = True, add_ratios: bool = False):
         self.add_sincos = bool(add_sincos)
         self.add_ratios = bool(add_ratios)
-        self.feat_names_: List[str] = []  # 訓練時最後使用的特徵名稱（for調試）
+        self.feat_names_: List[str] = []
 
     def _augment(self, X: np.ndarray) -> np.ndarray:
-        # X: [s1,s2,s3,a3,a1,a2]
         s1, s2, s3 = X[:, 0], X[:, 1], X[:, 2]
         a3, a1, a2 = X[:, 3], X[:, 4], X[:, 5]
         feats = [s1, s2, s3, a3, a1, a2]
@@ -467,14 +441,9 @@ class AngleModelBase:
         return X_aug
 
     def local_jacobian_numeric(self, x: np.ndarray, h: float = 1e-4) -> np.ndarray:
-        """
-        針對原始6個設計參數 (s1,s2,s3,a3,a1,a2) 做中央差分近似：
-          ∂f/∂x_j ≈ [f(x+hej) - f(x-hej)]/(2h)
-        """
-
         def f(xx: np.ndarray) -> float:
             df_tmp = pd.DataFrame([dict(zip(FEATURES, xx))])
-            return float(self.predict_df(df_tmp)["DIP_a3(deg)"].iloc[0])
+            return float(self.predict_df(df_tmp)["delta_a3"].iloc[0])
 
         J = np.zeros(6, dtype=float)
         for j in range(6):
@@ -488,8 +457,6 @@ class AngleModelBase:
 
 # ---------------- Angle model variants ----------------
 class AngleModelOLS(AngleModelBase):
-    """原本 OLS：多項式 + ridge"""
-
     def __init__(
         self,
         degree: int = 2,
@@ -524,7 +491,7 @@ class AngleModelOLS(AngleModelBase):
         d = df[FEATURES + TARGETS].dropna().copy()
         X = d[FEATURES].to_numpy(dtype=float)
         Phi = self._design(X)
-        y = d["DIP_a3(deg)"].to_numpy(dtype=float).reshape(-1, 1)
+        y = d["delta_a3"].to_numpy(dtype=float).reshape(-1, 1)
         K = Phi.T @ Phi + self.ridge * np.eye(Phi.shape[1])
         self.beta = (np.linalg.inv(K) @ (Phi.T @ y)).ravel()
 
@@ -532,7 +499,7 @@ class AngleModelOLS(AngleModelBase):
         X = df_design[FEATURES].to_numpy(dtype=float)
         Phi = self._design(X)
         yhat = (Phi @ self.beta).ravel()
-        return pd.DataFrame({"DIP_a3(deg)": yhat}, index=df_design.index)
+        return pd.DataFrame({"delta_a3": yhat}, index=df_design.index)
 
 
 class AngleModelHuber(AngleModelBase):
@@ -562,7 +529,7 @@ class AngleModelHuber(AngleModelBase):
         if self.scale:
             self.scaler = StandardScaler().fit(X_aug)
             X_aug = self.scaler.transform(X_aug)
-        y = d["DIP_a3(deg)"].to_numpy(dtype=float)
+        y = d["delta_a3"].to_numpy(dtype=float)
         self.model.fit(X_aug, y)
 
     def predict_df(self, df_design: pd.DataFrame) -> pd.DataFrame:
@@ -571,12 +538,10 @@ class AngleModelHuber(AngleModelBase):
         if self.scale and self.scaler is not None:
             X_aug = self.scaler.transform(X_aug)
         yhat = self.model.predict(X_aug)
-        return pd.DataFrame({"DIP_a3(deg)": yhat}, index=df_design.index)
+        return pd.DataFrame({"delta_a3": yhat}, index=df_design.index)
 
 
 class AngleModelRF(AngleModelBase):
-    """RandomForest：擬合非線性且對特徵尺度不敏感。"""
-
     def __init__(
         self,
         n_estimators: int = 300,
@@ -599,14 +564,14 @@ class AngleModelRF(AngleModelBase):
         d = df[FEATURES + TARGETS].dropna().copy()
         X = d[FEATURES].to_numpy(dtype=float)
         X_aug = self._augment(X)
-        y = d["DIP_a3(deg)"].to_numpy(dtype=float)
+        y = d["delta_a3"].to_numpy(dtype=float)
         self.model.fit(X_aug, y)
 
     def predict_df(self, df_design: pd.DataFrame) -> pd.DataFrame:
         X = df_design[FEATURES].to_numpy(dtype=float)
         X_aug = self._augment(X)
         yhat = self.model.predict(X_aug)
-        return pd.DataFrame({"DIP_a3(deg)": yhat}, index=df_design.index)
+        return pd.DataFrame({"delta_a3": yhat}, index=df_design.index)
 
 
 # ---------------- Metrics & evaluation ----------------
@@ -738,7 +703,7 @@ def evaluate_loso_cv(df_used, model_builder):
 def precomp_shrink_into_original(
     J, dm2, dm3, dma3, weights=None, allow_mask=None, ridge=1e-6
 ):
-    """舊版求解器: 在成品尺寸空間 (measurement space) 進行線性求解"""
+    """求解器: 在成品尺寸空間 (measurement space) 進行線性求解"""
     E_s2 = np.array([0, 1, 0, 0, 0, 0], float)
     E_s3 = np.array([0, 0, 1, 0, 0, 0], float)
     A = np.vstack([E_s2 - J[0, :], E_s3 - J[1, :], J[2, :]])
@@ -769,7 +734,7 @@ def precomp_shrink_into_original(
 
 
 def precomp_in_deviation_space(J, b_prime, ridge=1e-6):
-    """新版求解器: 在模型輸出空間 (deviation space) 進行線性求解"""
+    """求解器: 在模型輸出空間 (deviation space) 進行線性求解"""
     A = J
     b = np.asarray(b_prime, dtype=float).reshape(-1, 1)
     ATA = A.T @ A + ridge * np.eye(A.shape[1])
@@ -815,65 +780,24 @@ def main():
         choices=["ols", "huber", "rf"],
         help="長度回歸器：ols/huber/rf",
     )
-
-    ap.add_argument(
-        "--len-huber-alpha",
-        type=float,
-        default=1e-3,
-        help="(length huber) alpha，預設 1e-3",
-    )
-    ap.add_argument(
-        "--len-huber-eps",
-        type=float,
-        default=1.35,
-        help="(length huber) epsilon，預設 1.35",
-    )
-    ap.add_argument(
-        "--len-huber-max-iter",
-        type=int,
-        default=2000,
-        help="(length huber) max_iter，預設 2000",
-    )
+    ap.add_argument("--len-huber-alpha", type=float, default=1e-3)
+    ap.add_argument("--len-huber-eps", type=float, default=1.35)
+    ap.add_argument("--len-huber-max-iter", type=int, default=2000)
     ap.add_argument(
         "--scale-length", action="store_true", help="標準化長度模型輸入特徵"
     )
-    # ---- 長度 RF 專用參數 ----
-    ap.add_argument(
-        "--len-rf-n-est", type=int, default=300, help="(length rf) n_estimators"
-    )
-    ap.add_argument(
-        "--len-rf-max-depth",
-        type=int,
-        default=None,
-        help="(length rf) max_depth (None=不限)",
-    )
-    ap.add_argument(
-        "--len-rf-min-leaf", type=int, default=1, help="(length rf) min_samples_leaf"
-    )
-    ap.add_argument(
-        "--len-rf-max-features",
-        type=float,
-        default=1.0,
-        help="(length rf) max_features，建議 0.6~0.9 以抑制過擬合",
-    )
+    ap.add_argument("--len-rf-n-est", type=int, default=300)
+    ap.add_argument("--len-rf-max-depth", type=int, default=None)
+    ap.add_argument("--len-rf-min-leaf", type=int, default=1)
+    ap.add_argument("--len-rf-max-features", type=float, default=1.0)
     ap.add_argument(
         "--len-rf-criterion",
         type=str,
         default="squared_error",
         choices=["squared_error", "absolute_error"],
-        help="(length rf) 分裂準則；absolute_error 對 MAE/P95 較友善",
     )
-    # ---- 長度特徵增強 ----
-    ap.add_argument(
-        "--len-add-ratios",
-        action="store_true",
-        help="長度模型加入比例特徵：s1/s2, s1/s3, s2/s3",
-    )
-    ap.add_argument(
-        "--len-add-sincos",
-        action="store_true",
-        help="長度模型加入角度正弦/餘弦特徵：sin,cos(a1,a2,a3)",
-    )
+    ap.add_argument("--len-add-ratios", action="store_true")
+    ap.add_argument("--len-add-sincos", action="store_true")
 
     # 角度模型選擇與參數
     ap.add_argument(
@@ -883,43 +807,18 @@ def main():
         choices=["ols", "rf", "huber"],
         help="角度回歸器：ols(多項式+ridge)/rf(RandomForest)/huber",
     )
-    ap.add_argument(
-        "--angle-poly", type=int, default=2, help="(ols) polynomial degree (default 2)"
-    )
-    ap.add_argument(
-        "--angle-ridge",
-        type=float,
-        default=1e-2,
-        help="(ols) ridge; (huber) alpha (default 1e-2)",
-    )
-    ap.add_argument("--rf-n-est", type=int, default=300, help="(rf) n_estimators")
-    ap.add_argument(
-        "--rf-max-depth", type=int, default=None, help="(rf) max_depth (None=不限)"
-    )
-    ap.add_argument("--rf-min-leaf", type=int, default=1, help="(rf) min_samples_leaf")
-    ap.add_argument(
-        "--huber-max-iter",
-        type=int,
-        default=2000,
-        help="(huber) max_iter, default 2000",
-    )
-    ap.add_argument(
-        "--huber-eps", type=float, default=1.35, help="(huber) epsilon, default 1.35"
-    )
+    ap.add_argument("--angle-poly", type=int, default=2)
+    ap.add_argument("--angle-ridge", type=float, default=1e-2)
+    ap.add_argument("--rf-n-est", type=int, default=300)
+    ap.add_argument("--rf-max-depth", type=int, default=None)
+    ap.add_argument("--rf-min-leaf", type=int, default=1)
+    ap.add_argument("--huber-max-iter", type=int, default=2000)
+    ap.add_argument("--huber-eps", type=float, default=1.35)
     ap.add_argument(
         "--scale-angle", action="store_true", help="標準化角度模型的輸入特徵"
     )
-
-    ap.add_argument(
-        "--add-angle-sincos",
-        action="store_true",
-        help="角度模型增加 sin/cos(a1,a2,a3) 特徵",
-    )
-    ap.add_argument(
-        "--add-ratios",
-        action="store_true",
-        help="角度模型增加比例特徵 s1/s2, s1/s3, s2/s3",
-    )
+    ap.add_argument("--add-angle-sincos", action="store_true")
+    ap.add_argument("--add-ratios", action="store_true")
 
     args = ap.parse_args()
 
@@ -937,7 +836,6 @@ def main():
         df_use = df_raw.copy()
 
     # 2) 訓練模型
-    # === main() 內建立長度模型 ===
     if args.length_model == "ols":
         model_len = LinearOLS(ridge=1e-9)
     elif args.length_model == "huber":
@@ -981,7 +879,6 @@ def main():
             add_sincos=args.add_angle_sincos,
             add_ratios=args.add_ratios,
         )
-
     else:  # "rf"
         model_ang = AngleModelRF(
             n_estimators=args.rf_n_est,
@@ -990,62 +887,57 @@ def main():
             add_sincos=args.add_angle_sincos,
             add_ratios=args.add_ratios,
         )
-
     model_ang.fit(df_use)
 
-    # 3) ===== 全新：迭代式事前預測補償 (Iterative Proactive Pre-compensation) =====
+    # 3) ===== 迭代式事前預測補償 (Iterative Proactive Pre-compensation) =====
     print("\n\n=== Iterative Proactive Pre-compensation (Deviation Space Strategy) ===")
+    print(
+        "[LOGIC UPDATE] Angle compensation is now based on delta_a3 = design_a3 - dip_a3."
+    )
 
     # --- 步驟 1: 定義您的「目標設計 (target_design)」---
-
     # --- 手動設定區塊 ---
-    target_design = {
-        "Design_s1(mm)": 0.42,
-        "Design_s2(mm)": 0.76,
-        "Design_s3(mm)": 0.76,
-        "Design_a3(deg)": 32.0,
-        "Design_a1(deg)": 74.0,
-        "Design_a2(deg)": 74.0,
+    target_design_independent = {
+        "Design_s2(mm)": 0.87,
+        "Design_s3(mm)": 0.88,
+        "Design_a3(deg)": 31.0,
     }
+    target_design = apply_geometric_constraints(target_design_independent)
 
-    try:
-        target_design
-    except NameError:
-        print("\n[Info] 未手動設定 target_design，將使用訓練數據的平均值作為範例。")
-        target_design = dict(df_use[FEATURES].mean())
-
-    print("\n--- Initial Target Design ---")
+    print("\n--- Initial Target Design (Geometrically Constrained) ---")
     for k, v in target_design.items():
         print(f"  - {k}: {v:.6f}")
 
     # --- 迭代控制器 ---
-    num_steps = 80
-    step_size = 0.01
-
+    num_steps = 1000
+    step_size = 0.001
     current_design = target_design.copy()
-
     print(
         f"\n[Info] Starting iterative compensation with {num_steps} steps (step_size={step_size})..."
     )
 
     # --- 迭代迴圈 ---
     for i in range(num_steps):
-        print(f"\n--- Iteration {i+1}/{num_steps} ---")
+        if (i + 1) % 500 == 0:  # 每 50 次迭代印一次 log
+            print(f"\n--- Iteration {i+1}/{num_steps} ---")
+            print(
+                "  Current Design:", {k: f"{v:.4f}" for k, v in current_design.items()}
+            )
 
         current_df = pd.DataFrame([current_design])
         current_vec = current_df[FEATURES].to_numpy().flatten()
-        print("  Current Design:", {k: f"{v:.4f}" for k, v in current_design.items()})
 
-        # 步驟 2: 從「當前設計」預測其收縮率/角度
+        # 步驟 2: 從「當前設計」預測其收縮率與角度偏差
         predicted_deltas = model_len.predict_df(current_df)
-        predicted_angle = model_ang.predict_df(current_df)
+        predicted_angle_delta = model_ang.predict_df(current_df)
 
         pred_ds2_frac = predicted_deltas["delta_s2"].iloc[0]
         pred_ds3_frac = predicted_deltas["delta_s3"].iloc[0]
-        pred_ma3 = predicted_angle["DIP_a3(deg)"].iloc[0]
+        pred_delta_a3 = predicted_angle_delta["delta_a3"].iloc[
+            0
+        ]  # 模型預測的偏差 (design - dip)
 
-        # 步驟 3: 計算「理想收縮率」與「預測收縮率」的差距
-        # 理想收縮率 d_target 滿足: current_design * (1 - d_target) = target_design
+        # 步驟 3: 計算「目標偏差」與「預測偏差」之間的差距
         eps = 1e-9
         target_ds2_frac = 1 - (
             target_design["Design_s2(mm)"] / (current_design["Design_s2(mm)"] + eps)
@@ -1053,27 +945,33 @@ def main():
         target_ds3_frac = 1 - (
             target_design["Design_s3(mm)"] / (current_design["Design_s3(mm)"] + eps)
         )
-
-        # 誤差向量 b' (在偏差空間中)
         error_ds2 = target_ds2_frac - pred_ds2_frac
         error_ds3 = target_ds3_frac - pred_ds3_frac
-        error_a3 = target_design["Design_a3(deg)"] - pred_ma3
+
+        # 【邏輯更新】計算角度的目標偏差與誤差
+        # 目標：最終的 dip_a3 應該等於 target_design["Design_a3(deg)"]
+        # 對於目前的 current_design，我們期望的偏差值應該是：
+        target_delta_a3 = (
+            current_design["Design_a3(deg)"] - target_design["Design_a3(deg)"]
+        )
+        # 誤差 = 期望的偏差 - 模型預測的偏差
+        error_a3 = target_delta_a3 - pred_delta_a3
+
         b_prime = [error_ds2, error_ds3, error_a3]
 
         # 步驟 4: 在「當前點」計算雅可比矩陣 J，並求解 Δx
         J_ang_row_current = model_ang.local_jacobian_numeric(current_vec)
         J_current = np.vstack([model_len.local_jacobian(), J_ang_row_current[None, :]])
-
-        # 使用新的求解器 precomp_in_deviation_space
         dx_full = precomp_in_deviation_space(J_current, b_prime)
 
         # 步驟 5: 只往前走一小步
         step_to_take = step_size * dx_full
 
-        # 步驟 6: 更新設計，準備下一次迭代
-        current_design = {
+        # 步驟 6: 更新設計，並強制執行幾何約束
+        temp_design = {
             k: v + step for (k, v), step in zip(current_design.items(), step_to_take)
         }
+        current_design = apply_geometric_constraints(temp_design)
 
     # --- 最終結果 ---
     compensated_design = current_design
@@ -1083,55 +981,64 @@ def main():
 
     # --- 步驟 7: (驗證) 將補償後的設計代入模型，檢視最終預測結果 ---
     print("\n\n--- Step 7: Verification of the Final Design ---")
-    print(
-        "Now we take the compensated design and run it through the models one last time..."
-    )
-
     compensated_df = pd.DataFrame([compensated_design])
-
-    # 預測補償後設計的收縮量
     final_predicted_deltas = model_len.predict_df(compensated_df)
-    final_predicted_angle = model_ang.predict_df(compensated_df)
+    final_predicted_angle_delta = model_ang.predict_df(compensated_df)
 
     final_pred_ds2_frac = final_predicted_deltas["delta_s2"].iloc[0]
     final_pred_ds3_frac = final_predicted_deltas["delta_s3"].iloc[0]
-    final_pred_ma3 = final_predicted_angle["DIP_a3(deg)"].iloc[0]
+    final_pred_delta_a3 = final_predicted_angle_delta["delta_a3"].iloc[0]  # 預測的偏差
 
-    print("\n  - Predicted Shrinkage for Compensated Design:")
+    print("\n  - Predicted Shrinkage & Deviation for Compensated Design:")
     print(
         f"    - s2 shrinkage: {final_pred_ds2_frac:.4f} ({final_pred_ds2_frac*100:.2f}%)"
     )
     print(
         f"    - s3 shrinkage: {final_pred_ds3_frac:.4f} ({final_pred_ds3_frac*100:.2f}%)"
     )
-    print(f"    - final angle: {final_pred_ma3:.4f} degrees")
+    print(f"    - a3 deviation (design-dip): {final_pred_delta_a3:.4f} degrees")
 
-    # 計算最終預測的成品尺寸
+    # 【邏輯更新】計算最終成品尺寸
     final_s2 = compensated_design["Design_s2(mm)"] * (1 - final_pred_ds2_frac)
     final_s3 = compensated_design["Design_s3(mm)"] * (1 - final_pred_ds3_frac)
-    final_a3 = final_pred_ma3
+    # 最終成品角度 (dip_a3) = 設計角度 (design_a3) - 預測偏差 (predicted_delta_a3)
+    final_a3 = compensated_design["Design_a3(deg)"] - final_pred_delta_a3
 
     print(
-        "\n  - Final Predicted Dimensions (Compensated Design + Predicted Shrinkage):"
+        "\n  - Final Predicted Dimensions (Compensated Design + Predicted Shrinkage/Deviation):"
     )
+    final_s1 = compensated_design["Design_s1(mm)"]
+    final_a1 = compensated_design["Design_a1(deg)"]
+    final_a2 = compensated_design["Design_a2(deg)"]
+    print(f"    - s1: {final_s1:.6f} mm")
     print(f"    - s2: {final_s2:.6f} mm")
     print(f"    - s3: {final_s3:.6f} mm")
     print(f"    - a3: {final_a3:.6f} degrees")
+    print(f"    - a1: {final_a1:.6f} degrees")
+    print(f"    - a2: {final_a2:.6f} degrees")
 
     print("\n  - Comparison with Original Target:")
     print(
-        f"    - Target s2: {target_design['Design_s2(mm)']:.6f}  |  Achieved s2: {final_s2:.6f}"
+        f"    - Target s1: {target_design['Design_s1(mm)']:.6f}  |  Achieved s1: {final_s1:.6f}  (Constrained)"
     )
     print(
-        f"    - Target s3: {target_design['Design_s3(mm)']:.6f}  |  Achieved s3: {final_s3:.6f}"
+        f"    - Target s2: {target_design['Design_s2(mm)']:.6f}  |  Achieved s2: {final_s2:.6f}  (Predicted by model)"
     )
     print(
-        f"    - Target a3: {target_design['Design_a3(deg)']:.6f}  |  Achieved a3: {final_a3:.6f}"
+        f"    - Target s3: {target_design['Design_s3(mm)']:.6f}  |  Achieved s3: {final_s3:.6f}  (Predicted by model)"
+    )
+    print(
+        f"    - Target a3: {target_design['Design_a3(deg)']:.6f}  |  Achieved a3: {final_a3:.6f}  (Predicted by model)"
+    )
+    print(
+        f"    - Target a1: {target_design['Design_a1(deg)']:.6f}  |  Achieved a1: {final_a1:.6f}  (Constrained)"
+    )
+    print(
+        f"    - Target a2: {target_design['Design_a2(deg)']:.6f}  |  Achieved a2: {final_a2:.6f}  (Constrained)"
     )
 
     # 構造便捷 builder，供 K-fold/LOSO 重新訓練
     def builder(df_tr):
-        # ... (builder 函式內容維持不變) ...
         if args.length_model == "ols":
             mdl_len = LinearOLS(ridge=1e-9)
         elif args.length_model == "huber":
@@ -1176,7 +1083,6 @@ def main():
                 add_ratios=args.add_ratios,
             )
         else:  # "rf"
-            # 【修正後的程式碼】
             mdl_ang = AngleModelRF(
                 n_estimators=args.rf_n_est,
                 max_depth=args.rf_max_depth,
@@ -1221,8 +1127,6 @@ def main():
             with pd.ExcelWriter(args.save_report) as xl:
                 overall.to_excel(xl, index=False, sheet_name="overall")
                 per_struct.to_excel(xl, index=False, sheet_name="per_structure")
-                # J_df is at a single operating point, may not be as relevant for iterative
-                # J_df.to_excel(xl, sheet_name="jacobian_at_op")
                 if cv_df is not None:
                     cv_df.to_excel(xl, index=False, sheet_name="kfold_cv")
                 if loso_overall is not None:
