@@ -149,11 +149,13 @@ class LengthModelRF:
         random_state=42,
         add_ratios: bool = False,
         add_sincos: bool = False,
+        add_interactions: bool = False,
         max_features: float = 1.0,
         criterion: str = "squared_error",
     ):
         self.add_ratios = bool(add_ratios)
         self.add_sincos = bool(add_sincos)
+        self.add_interactions = bool(add_interactions)
 
         # 注意：這裡才把 max_features / criterion 傳進 RF
         self.model_s2 = RandomForestRegressor(
@@ -177,9 +179,11 @@ class LengthModelRF:
 
     def _X(self, df):
         X_raw = df[FEATURES].to_numpy(dtype=float)
-        # 你的 augment 工具若已存在就用之；否則可用我之前提供的 augment_feats_for_lengths
         return augment_feats_for_lengths(
-            X_raw, add_ratios=self.add_ratios, add_sincos=self.add_sincos
+            X_raw,
+            add_ratios=self.add_ratios,
+            add_sincos=self.add_sincos,
+            add_interactions=self.add_interactions,
         )
 
     def fit(self, df):
@@ -226,6 +230,7 @@ from sklearn.linear_model import HuberRegressor
 from sklearn.preprocessing import StandardScaler
 from itertools import combinations
 
+
 class LengthModelHuber:
     """
     以 Huber 擬合 delta_s2、delta_s3
@@ -242,7 +247,7 @@ class LengthModelHuber:
         scale: bool = True,
         add_ratios: bool = False,
         add_sincos: bool = False,
-        add_interactions=False, 
+        add_interactions: bool = False,
     ):
         self.alpha = float(alpha)
         self.epsilon = float(epsilon)
@@ -250,7 +255,7 @@ class LengthModelHuber:
         self.scale = bool(scale)
         self.add_ratios = bool(add_ratios)
         self.add_sincos = bool(add_sincos)
-        self.add_interactions = add_interactions
+        self.add_interactions = bool(add_interactions)
         self.model_s2 = HuberRegressor(
             alpha=self.alpha, epsilon=self.epsilon, max_iter=self.max_iter
         )
@@ -269,6 +274,7 @@ class LengthModelHuber:
                 X_raw,
                 add_ratios=self.add_ratios,
                 add_sincos=self.add_sincos,
+                add_interactions=self.add_interactions,
                 return_names=True,
             )
             self._aug_names = list(names)
@@ -277,6 +283,7 @@ class LengthModelHuber:
                 X_raw,
                 add_ratios=self.add_ratios,
                 add_sincos=self.add_sincos,
+                add_interactions=self.add_interactions,
                 return_names=False,
             )
         return X_aug
@@ -290,35 +297,25 @@ class LengthModelHuber:
             X_aug = self.scaler.transform(X_aug)
         return X_aug
 
-    def fit(self, df):
-        # 假設 y 在欄位名稱叫 "target" 或 "y"
-        # 需要根據你實際用的欄位名稱來調整
-        y = df["y"].values
-        X = df.drop(columns=["y"]).values
+    def fit(self, df: pd.DataFrame):
+        X_aug = self._prepare_X(df, fit=True)
+        # For Jacobian chain rule, we need the mean of the original features
+        self._ref_point_ = df[FEATURES].to_numpy(dtype=float).mean(axis=0)
 
-        X_aug = X.copy()
+        y2 = df["delta_s2"].to_numpy(dtype=float)
+        y3 = df["delta_s3"].to_numpy(dtype=float)
 
-        if self.add_interactions:
-            new_features = []
-            for i, j in combinations(range(X.shape[1]), 2):
-                new_features.append((X[:, i] * X[:, j]).reshape(-1, 1))
-            if new_features:
-                X_aug = np.hstack([X_aug] + new_features)
-
-        self.model.fit(X_aug, y)
-        self.n_features_in_ = X_aug.shape[1]
+        self.model_s2.fit(X_aug, y2)
+        self.model_s3.fit(X_aug, y3)
         return self
 
-    def predict(self, df):
-        X = df.drop(columns=["y"]).values
-        X_aug = X.copy()
-        if self.add_interactions:
-            new_features = []
-            for i, j in combinations(range(X.shape[1]), 2):
-                new_features.append((X[:, i] * X[:, j]).reshape(-1, 1))
-            if new_features:
-                X_aug = np.hstack([X_aug] + new_features)
-        return self.model.predict(X_aug)
+    def predict_df(self, df_design: pd.DataFrame) -> pd.DataFrame:
+        X_aug = self._prepare_X(df_design, fit=False)
+        pred_s2 = self.model_s2.predict(X_aug)
+        pred_s3 = self.model_s3.predict(X_aug)
+        return pd.DataFrame(
+            {"delta_s2": pred_s2, "delta_s3": pred_s3}, index=df_design.index
+        )
 
     # ---- 內部：aug特徵對原始6維的雅可比 D (n_aug x 6) 於某點 x_raw ----
     def _aug_jac_wrt_base(self, x_raw: np.ndarray) -> np.ndarray:
@@ -624,7 +621,7 @@ def _metrics(y_true, y_pred):
     return mae, rmse, r2, p95
 
 
-def evaluate_overall(df_used, model_len: LinearOLS, model_ang) -> pd.DataFrame:
+def evaluate_overall(df_used, model_len, model_ang) -> pd.DataFrame:
     y_true = df_used[TARGETS].to_numpy(dtype=float)
     y_len = model_len.predict_df(df_used)
     y_ang = model_ang.predict_df(df_used)
@@ -638,7 +635,7 @@ def evaluate_overall(df_used, model_len: LinearOLS, model_ang) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def evaluate_per_structure(df_raw, model_len: LinearOLS, model_ang):
+def evaluate_per_structure(df_raw, model_len, model_ang):
     d = df_raw[FEATURES + TARGETS].dropna().copy()
     d["__key__"] = d[FEATURES].astype(str).agg("|".join, axis=1)
     y_len = model_len.predict_df(d)
@@ -944,7 +941,7 @@ def main():
             max_depth=args.len_rf_max_depth,
             min_samples_leaf=args.len_rf_min_leaf,
             add_ratios=getattr(args, "len_add_ratios", False),
-            # 若你也做了 len-rf-max-features / len-rf-criterion，這裡一併傳入
+            add_sincos=getattr(args, "len_add_sincos", False),
             max_features=getattr(args, "len_rf_max_features", 1.0),
             criterion=getattr(args, "len_rf_criterion", "squared_error"),
             add_interactions=getattr(args, "add_interactions", False),
@@ -953,7 +950,7 @@ def main():
         raise ValueError(f"Unknown --length-model: {args.length_model}")
     model_len.fit(df_use)
 
-    if args.angle_model == "ols":  # noqa: E999 (避免 IDE 誤報，實際為合法語法)
+    if args.angle_model == "ols":
         model_ang = AngleModelOLS(
             degree=args.angle_poly,
             ridge=args.angle_ridge,
@@ -1010,19 +1007,36 @@ def main():
     print({k: float(demo.iloc[0][k]) for k in TARGETS})
 
     # 5) 預補償示範
-    s2_design = 0.900000
-    s3_design = 0.826455
-    a3_design = 52.021592
-    delta_s2_meas = 0.16
-    delta_s3_meas = 0.16
-    angle_meas = 58.6
-    m2_cur = s2_design - delta_s2_meas
-    m3_cur = s3_design - delta_s3_meas
-    ma3_cur = angle_meas
-    dm2 = s2_design - m2_cur
-    dm3 = s3_design - m3_cur
-    dma3 = a3_design - ma3_cur
+    # 1. 定義現況：設計值是多少？實際量測誤差是多少？
+    s2_design = 0.900000  # 單位: mm
+    s3_design = 0.826455  # 單位: mm
+    a3_design = 52.021592  # 單位: 度
+
+    # 觀測到的收縮率 (fractional error) 和角度量測值
+    delta_s2_meas_fraction = 0.16  # 代表 s2 收縮了 16%
+    delta_s3_meas_fraction = 0.16  # 代表 s3 收縮了 16%
+    ma3_meas = 58.6  # 最終量測到的角度
+
+    # 根據收縮率計算出實際的成品尺寸
+    m2_actual = s2_design * (
+        1 - delta_s2_meas_fraction
+    )  # 正確的計算: 0.9 * 0.84 = 0.756 mm
+    m3_actual = s3_design * (1 - delta_s3_meas_fraction)
+    # ma3_actual 就是 ma3_meas
+
+    # 2. 定義目標：我們希望成品的尺寸改變多少？
+    # 目標改變量 = 理想設計值 - 實際量測值
+    dm2 = s2_design - m2_actual  # 我們希望 s2 增加的 mm 量
+    dm3 = s3_design - m3_actual  # 我們希望 s3 增加的 mm 量
+    dma3 = a3_design - ma3_meas  # 我們希望 a3 改變的角度
+
+    # 3. 求解：計算需要對「設計參數」做出的調整量 Δx
+    # precomp_shrink_into_original 函數本身的核心數學是正確的，
+    # 它能根據目標改變量 (dm2, dm3, dma3)，反解出設計調整量 Δx。
     dx = precomp_shrink_into_original(J, dm2, dm3, dma3, weights=None, allow_mask=None)
+
+    # 4. 驗證
+    # ... 驗證步驟 ...
     print("\n=== Pre-compensation Δx (Design variables order) ===")
     print("Order:", FEATURES)
     print(np.round(dx, 6))
@@ -1055,6 +1069,7 @@ def main():
                 scale=args.scale_length,
                 add_ratios=getattr(args, "len_add_ratios", False),
                 add_sincos=getattr(args, "len_add_sincos", False),
+                add_interactions=getattr(args, "add_interactions", False),
             )
         elif args.length_model == "rf":
             mdl_len = LengthModelRF(
@@ -1062,8 +1077,10 @@ def main():
                 max_depth=args.len_rf_max_depth,
                 min_samples_leaf=args.len_rf_min_leaf,
                 add_ratios=getattr(args, "len_add_ratios", False),
+                add_sincos=getattr(args, "len_add_sincos", False),
                 max_features=getattr(args, "len_rf_max_features", 1.0),
                 criterion=getattr(args, "len_rf_criterion", "squared_error"),
+                add_interactions=getattr(args, "add_interactions", False),
             )
         else:
             raise ValueError(f"Unknown --length-model: {args.length_model}")
@@ -1188,3 +1205,5 @@ if __name__ == "__main__":
     except Exception:
         pass
     main()
+
+# python run_regression_jacobian_g.py --file "C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202508\DOE_RB\0.6_0.9\results_analyzed_final\analysis_results -copy.xlsx" --average --eval --cv 5 --length-model huber --len-huber-alpha 1 --len-huber-eps 1 --len-huber-max-iter 1000 --scale-length  --len-add-sincos --angle-model huber --add-ratios --add-angle-sincos --scale-angle --angle-ridge  0.000001 --huber-max-iter 1000 --save-report "C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202508\DOE_RB\0.6_0.9\model_report.xlsx"
