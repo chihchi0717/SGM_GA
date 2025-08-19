@@ -898,9 +898,9 @@ def main():
     # --- 步驟 1: 定義您的「目標設計 (target_design)」---
     # --- 手動設定區塊 ---
     target_design_independent = {
-        "Design_s2(mm)": 0.87,
-        "Design_s3(mm)": 0.88,
-        "Design_a3(deg)": 31.0,
+        "Design_s2(mm)": 0.6,
+        "Design_s3(mm)": 0.6,
+        "Design_a3(deg)": 28,
     }
     target_design = apply_geometric_constraints(target_design_independent)
 
@@ -909,8 +909,8 @@ def main():
         print(f"  - {k}: {v:.6f}")
 
     # --- 迭代控制器 ---
-    num_steps = 1000
-    step_size = 0.001
+    num_steps = 100
+    step_size = 1
     current_design = target_design.copy()
     print(
         f"\n[Info] Starting iterative compensation with {num_steps} steps (step_size={step_size})..."
@@ -918,7 +918,7 @@ def main():
 
     # --- 迭代迴圈 ---
     for i in range(num_steps):
-        if (i + 1) % 500 == 0:  # 每 50 次迭代印一次 log
+        if (i + 1) % 50 == 0:  # 每 50 次迭代印一次 log
             print(f"\n--- Iteration {i+1}/{num_steps} ---")
             print(
                 "  Current Design:", {k: f"{v:.4f}" for k, v in current_design.items()}
