@@ -1003,11 +1003,11 @@ def main():
     # 如果您有特定的目標設計，請取消以下區塊的註解 (#)，並填入您想要的6個數值。
     target_design = {
         "Design_s1(mm)": 0.42,
-        "Design_s2(mm)": 0.85,
-        "Design_s3(mm)": 0.9,
-        "Design_a3(deg)": 28,
-        "Design_a1(deg)": 83,
-        "Design_a2(deg)": 69.0,
+        "Design_s2(mm)": 0.76,
+        "Design_s3(mm)": 0.76,
+        "Design_a3(deg)": 32,
+        "Design_a1(deg)": 74,
+        "Design_a2(deg)": 74,
     }
 
     # --- 自動設定區塊 (預設使用訓練數據的平均值) ---

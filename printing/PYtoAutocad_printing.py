@@ -394,7 +394,7 @@ class PrismBuilder:
         base_length_y = y  # 30  # 55
         base_thickness = z  # 15
         start_base = APoint(
-            Cx, 0, 0
+            base_length_x / 2, 0, 0
         )  # MS: APoint(base_length_x / 2, 0, 0) #Alpha: APoint(Cx, 0, 0) # OM: APoint(base_length_x - 0.6, 0, 0)
 
         send_command_with_retry(
@@ -408,59 +408,59 @@ class PrismBuilder:
 # ---------------------------------------------------------------------------
 
 
-# def main():
-#     # um2mm = 0.001
-
-#     sid_ang = [0.3, 0.3, 60]
-#     folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202508\0804"
-#     sat_name = os.path.join(folder, "0.3_0.3_60_0.6sub_OM.STL")
-#     paths = OutputPaths(folder=folder, sat_name=sat_name)
-
-#     builder = PrismBuilder(scale=1)
-#     builder.build(
-#         sid_ang,
-#         mode="triangle",
-#         paths=paths,
-#         sub_length_x=0.6,
-#         base_length_y=38, # MS:38
-#         sub_thickness=5,  # MS:15 # Alpha: 5 #OM:3
-#         base_length_x=3,  # MS:11 # Alpha: 3 #OM:5
-#         base_thickness=5,
-#         fillet=0,
-#     )
-
-import os
-from itertools import product
-
-
 def main():
-    # 設定參數範圍
-    S1_values = [0.3, 0.6, 0.9]
-    S2_values = [0.3, 0.6, 0.9]
-    A1_values = [30, 60, 90, 120, 150]
+    # um2mm = 0.001
 
-    # 設定輸出資料夾
-    folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202508\DOE"
+    sid_ang = [0.76, 0.9, 59]
+    folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202508\0819"
+    sat_name = os.path.join(folder, "0.76_0.9_59_0.6sub_OM.SAT")
+    paths = OutputPaths(folder=folder, sat_name=sat_name)
 
-    for S1, S2, A1 in product(S1_values, S2_values, A1_values):
-        sid_ang = [S1, S2, A1]
-        filename = f"{S1:.2f}_{S2:.2f}_{A1}_0.6sub_ALPHA.STL"
-        sat_path = os.path.join(folder, filename)
+    builder = PrismBuilder(scale=1)
+    builder.build(
+        sid_ang,
+        mode="triangle",
+        paths=paths,
+        sub_length_x=0.6,
+        base_length_y=38, # MS:38
+        sub_thickness=3,  # MS:15 # Alpha: 5 #OM:3
+        base_length_x=5,  # MS:11 # Alpha: 3 #OM:5
+        base_thickness=5,
+        fillet=0,
+    )
 
-        paths = OutputPaths(folder=folder, sat_name=sat_path)
-        builder = PrismBuilder(scale=1)
+# import os
+# from itertools import product
 
-        builder.build(
-            sid_ang,
-            mode="triangle",
-            paths=paths,
-            sub_length_x=0.6,
-            base_length_y=38, # MS:38
-            sub_thickness=5,  # MS:15 # Alpha: 5 #OM:3
-            base_length_x=3,  # MS:11 # Alpha: 3 #OM:5
-            base_thickness=5,
-            fillet=0,
-        )
+
+# def main():
+#     # 設定參數範圍
+#     S1_values = [0.3, 0.6, 0.9]
+#     S2_values = [0.3, 0.6, 0.9]
+#     A1_values = [30, 60, 90, 120, 150]
+
+#     # 設定輸出資料夾
+#     folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202508\DOE"
+
+#     for S1, S2, A1 in product(S1_values, S2_values, A1_values):
+#         sid_ang = [S1, S2, A1]
+#         filename = f"{S1:.2f}_{S2:.2f}_{A1}_0.6sub_ALPHA.STL"
+#         sat_path = os.path.join(folder, filename)
+
+#         paths = OutputPaths(folder=folder, sat_name=sat_path)
+#         builder = PrismBuilder(scale=1)
+
+#         builder.build(
+#             sid_ang,
+#             mode="triangle",
+#             paths=paths,
+#             sub_length_x=0.6,
+#             base_length_y=38, # MS:38
+#             sub_thickness=5,  # MS:15 # Alpha: 5 #OM:3
+#             base_length_x=3,  # MS:11 # Alpha: 3 #OM:5
+#             base_thickness=5,
+#             fillet=0,
+#         )
 
 
 if __name__ == "__main__":
