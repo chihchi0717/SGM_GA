@@ -36,6 +36,8 @@ from compensation_models import (
 from compensation_strategies import (
     compensate_with_jacobian,
     compensate_without_jacobian,
+    compensate_with_random_search,
+    compensate_with_genetic_algorithm,
 )
 
 
@@ -158,7 +160,7 @@ def main():
         "--strategy",
         type=str,
         default="jacobian",
-        choices=["jacobian", "direct"],
+        choices=["jacobian", "direct", "search", "GA"],
         help="選擇補償策略: 'jacobian' (使用Jacobian矩陣) 或 'direct' (直接回饋)",
     )
     args = ap.parse_args()
@@ -191,9 +193,9 @@ def main():
 
     # --- 3. 執行補償策略 ---
     target_design_independent = {
-        "Design_s2(mm)": 0.76,
-        "Design_s3(mm)": 0.76,
-        "Design_a3(deg)": 32.0,
+        "Design_s2(mm)": 0.75,
+        "Design_s3(mm)": 0.69,
+        "Design_a3(deg)": 58,
     }
     target_design = apply_geometric_constraints(target_design_independent)
 
@@ -205,11 +207,18 @@ def main():
         compensated_design = compensate_with_jacobian(
             model_len, model_ang, target_design
         )
-    else:  # 'direct'
+    elif args.strategy == "direct":
         compensated_design = compensate_without_jacobian(
             model_len, model_ang, target_design
         )
-
+    elif args.strategy == "search":
+        compensated_design = compensate_with_random_search(
+            model_len, model_ang, target_design, df_use
+        )
+    elif args.strategy == "GA":
+        compensated_design = compensate_with_genetic_algorithm(
+            model_len, model_ang, target_design, df_use
+        )
     # --- 4. 驗證最終結果 ---
     print("\n\n--- 最終補償設計方案 ---")
     for k, v in compensated_design.items():
@@ -224,14 +233,32 @@ def main():
     # 【邏輯更新】直接使用模型預測的最終角度
     final_pred_ma3 = final_pred_ang["DIP_a3(deg)"].iloc[0]
 
-    final_s2 = compensated_design["Design_s2(mm)"] * (1 - final_pred_ds2)
-    final_s3 = compensated_design["Design_s3(mm)"] * (1 - final_pred_ds3)
-    # 【邏輯更新】最終角度即為模型預測值
-    final_a3 = final_pred_ma3
+    # 【邏輯修正】先計算出預測的獨立參數 s2, s3, a3
+    final_s2_pred = compensated_design["Design_s2(mm)"] * (1 - final_pred_ds2)
+    final_s3_pred = compensated_design["Design_s3(mm)"] * (1 - final_pred_ds3)
+    final_a3_pred = final_pred_ma3
+
+    # 【邏輯修正】再用預測出的 s2, s3, a3，透過幾何約束反算出 s1, a1, a2
+    final_product_independent = {
+        "Design_s2(mm)": final_s2_pred,
+        "Design_s3(mm)": final_s3_pred,
+        "Design_a3(deg)": final_a3_pred,
+    }
+    final_product_all = apply_geometric_constraints(final_product_independent)
+
+    final_s1 = final_product_all["Design_s1(mm)"]
+    final_s2 = final_product_all["Design_s2(mm)"]
+    final_s3 = final_product_all["Design_s3(mm)"]
+    final_a1 = final_product_all["Design_a1(deg)"]
+    final_a2 = final_product_all["Design_a2(deg)"]
+    final_a3 = final_product_all["Design_a3(deg)"]
 
     print("\n  - 預測的最終成品尺寸:")
+    print(f"    - s1: {final_s1:.6f} mm (目標: {target_design['Design_s1(mm)']:.6f})")
     print(f"    - s2: {final_s2:.6f} mm (目標: {target_design['Design_s2(mm)']:.6f})")
     print(f"    - s3: {final_s3:.6f} mm (目標: {target_design['Design_s3(mm)']:.6f})")
+    print(f"    - a1: {final_a1:.6f} deg (目標: {target_design['Design_a1(deg)']:.6f})")
+    print(f"    - a2: {final_a2:.6f} deg (目標: {target_design['Design_a2(deg)']:.6f})")
     print(f"    - a3: {final_a3:.6f} deg (目標: {target_design['Design_a3(deg)']:.6f})")
 
     # --- 5. 執行評估與儲存報告 ---
@@ -278,3 +305,5 @@ if __name__ == "__main__":
     except Exception:
         pass
     main()
+
+#python main.py --average --eval --cv 5 --length-model huber --len-huber-alpha 1 --len-huber-eps 1000 --len-huber-max-iter 10000 --scale-length --add-interactions --len-add-ratios --len-add-sincos --angle-model huber --scale-angle --angle-ridge 0.001 --huber-max-iter 8000 --save-report "model_report.xlsx" --strategy GA

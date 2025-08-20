@@ -42,7 +42,8 @@ class LinearOLS:
     def local_jacobian(self) -> np.ndarray:
         J = np.zeros((2, 6), dtype=float)
         for i, y in enumerate(["delta_s2", "delta_s3"]):
-            J[i, :] = self.beta[y][1:]
+            if y in self.beta:
+                J[i, :] = self.beta[y][1:]
         return J
 
 
@@ -58,6 +59,7 @@ class LengthModelRF:
         }
         self.model_s2 = RandomForestRegressor(**rf_params)
         self.model_s3 = RandomForestRegressor(**rf_params)
+        self._ref_point_: Optional[np.ndarray] = None
 
     def _X(self, df):
         X_raw = df[FEATURES].to_numpy(dtype=float)
@@ -72,6 +74,8 @@ class LengthModelRF:
         X = self._X(df)
         self.model_s2.fit(X, df["delta_s2"].to_numpy(dtype=float))
         self.model_s3.fit(X, df["delta_s3"].to_numpy(dtype=float))
+        # 儲存參考點以供 Jacobian 計算
+        self._ref_point_ = df[FEATURES].to_numpy(dtype=float).mean(axis=0)
         return self
 
     def predict_df(self, df_design):
@@ -84,8 +88,33 @@ class LengthModelRF:
             index=df_design.index,
         )
 
-    def local_jacobian(self):
-        return np.zeros((2, 6))  # RF 無解析 Jacobian
+    def local_jacobian_numeric(self, x: np.ndarray, h: float = 1e-4) -> np.ndarray:
+        """
+        【新增】針對 RF 模型，用數值方法計算 Jacobian。
+        """
+
+        def f(xx: np.ndarray) -> np.ndarray:
+            df_tmp = pd.DataFrame([dict(zip(FEATURES, xx))])
+            preds = self.predict_df(df_tmp)
+            return preds[["delta_s2", "delta_s3"]].to_numpy().flatten()
+
+        J = np.zeros((2, 6), dtype=float)
+        for j in range(6):
+            xp, xm = x.copy(), x.copy()
+            xp[j] += h
+            xm[j] -= h
+            grad_col = (f(xp) - f(xm)) / (2 * h)
+            J[:, j] = grad_col
+        return J
+
+    def local_jacobian(self) -> np.ndarray:
+        """
+        【更新】讓 RF 模型也能提供有效的 Jacobian。
+        """
+        if self._ref_point_ is None:
+            raise RuntimeError("Model must be fit() before computing Jacobian for RF.")
+        # 對於 RF，永遠使用數值 Jacobian，因為沒有解析解
+        return self.local_jacobian_numeric(self._ref_point_)
 
 
 class LengthModelHuber:
@@ -153,7 +182,6 @@ class LengthModelHuber:
         )
 
     def _aug_jac_wrt_base(self, x_raw: np.ndarray) -> np.ndarray:
-        # ... (此函式內容不變, 為了版面簡潔省略) ...
         assert self._aug_names is not None
         s1, s2, s3, a3, a1, a2 = x_raw.tolist()
         eps = 1e-9
@@ -243,7 +271,6 @@ class AngleModelBase:
         self.feat_names_: List[str] = []
 
     def _augment(self, X: np.ndarray) -> np.ndarray:
-        # ... (此函式內容不變, 為了版面簡潔省略) ...
         s1, s2, s3, a3, a1, a2 = X[:, 0], X[:, 1], X[:, 2], X[:, 3], X[:, 4], X[:, 5]
         feats = [s1, s2, s3, a3, a1, a2]
         names = ["s1", "s2", "s3", "a3", "a1", "a2"]
@@ -272,6 +299,7 @@ class AngleModelBase:
     def local_jacobian_numeric(self, x: np.ndarray, h: float = 1e-4) -> np.ndarray:
         def f(xx: np.ndarray) -> float:
             df_tmp = pd.DataFrame([dict(zip(FEATURES, xx))])
+            # 【邏輯更新】使用新的目標名稱
             return float(self.predict_df(df_tmp)["DIP_a3(deg)"].iloc[0])
 
         J = np.zeros(6, dtype=float)
@@ -306,6 +334,7 @@ class AngleModelOLS(AngleModelBase):
     def fit(self, df: pd.DataFrame):
         d = df[FEATURES + TARGETS].dropna().copy()
         Phi = self._design(d[FEATURES].to_numpy(dtype=float))
+        # 【邏輯更新】使用新的目標名稱
         y = d["DIP_a3(deg)"].to_numpy(dtype=float).reshape(-1, 1)
         K = Phi.T @ Phi + self.ridge * np.eye(Phi.shape[1])
         self.beta = (np.linalg.inv(K) @ (Phi.T @ y)).ravel()
@@ -317,6 +346,7 @@ class AngleModelOLS(AngleModelBase):
             if self.beta is not None
             else np.zeros(len(df_design))
         )
+        # 【邏輯更新】使用新的目標名稱
         return pd.DataFrame({"DIP_a3(deg)": yhat}, index=df_design.index)
 
 
@@ -343,12 +373,14 @@ class AngleModelHuber(AngleModelBase):
         if self.scale:
             self.scaler = StandardScaler().fit(X_aug)
             X_aug = self.scaler.transform(X_aug)
+        # 【邏輯更新】使用新的目標名稱
         self.model.fit(X_aug, d["DIP_a3(deg)"].to_numpy(dtype=float))
 
     def predict_df(self, df_design: pd.DataFrame) -> pd.DataFrame:
         X_aug = self._augment(df_design[FEATURES].to_numpy(dtype=float))
         if self.scale and self.scaler:
             X_aug = self.scaler.transform(X_aug)
+        # 【邏輯更新】使用新的目標名稱
         return pd.DataFrame(
             {"DIP_a3(deg)": self.model.predict(X_aug)}, index=df_design.index
         )
@@ -376,10 +408,12 @@ class AngleModelRF(AngleModelBase):
     def fit(self, df: pd.DataFrame):
         d = df[FEATURES + TARGETS].dropna().copy()
         X_aug = self._augment(d[FEATURES].to_numpy(dtype=float))
+        # 【邏輯更新】使用新的目標名稱
         self.model.fit(X_aug, d["DIP_a3(deg)"].to_numpy(dtype=float))
 
     def predict_df(self, df_design: pd.DataFrame) -> pd.DataFrame:
         X_aug = self._augment(df_design[FEATURES].to_numpy(dtype=float))
+        # 【邏輯更新】使用新的目標名稱
         return pd.DataFrame(
             {"DIP_a3(deg)": self.model.predict(X_aug)}, index=df_design.index
         )
