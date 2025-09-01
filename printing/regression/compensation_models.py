@@ -12,7 +12,10 @@ from sklearn.linear_model import HuberRegressor
 from sklearn.ensemble import RandomForestRegressor
 
 # 從工具模組導入共享的函式與變數
-from compensation_utils import FEATURES, TARGETS, augment_feats_for_lengths
+try:  # 優先使用套件內的相對匯入
+    from .compensation_utils import FEATURES, TARGETS, augment_feats_for_lengths
+except ImportError:  # pragma: no cover - 允許作為獨立腳本執行
+    from compensation_utils import FEATURES, TARGETS, augment_feats_for_lengths
 
 # ---------------- 長度模型 ----------------
 
