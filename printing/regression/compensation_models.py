@@ -21,6 +21,8 @@ class LinearOLS:
     def __init__(self, ridge: float = 1e-9):
         self.ridge = ridge
         self.beta: Dict[str, np.ndarray] = {}
+        # [新增] 儲存特徵名稱以便與係數對應
+        self.feature_names_ = ["intercept"] + FEATURES
 
     def fit(self, df: pd.DataFrame):
         d = df[FEATURES + TARGETS].dropna().copy()
@@ -33,16 +35,26 @@ class LinearOLS:
             b = Kinv @ (X_.T @ y)
             self.beta[yname] = b.ravel()
 
+    def get_coefficients_df(self) -> Optional[pd.DataFrame]:
+        """[新增] 將模型係數轉換為 DataFrame。"""
+        if not self.beta:
+            return None
+        return pd.DataFrame(self.beta, index=self.feature_names_)
+
     def predict_df(self, df_design: pd.DataFrame) -> pd.DataFrame:
         X = df_design[FEATURES].to_numpy(dtype=float)
         X_ = np.hstack([np.ones((X.shape[0], 1)), X])
-        out = {yname: (X_ @ b).ravel() for yname, b in self.beta.items()}
-        return pd.DataFrame(out, index=df_design.index)
+        # [修正] 確保矩陣維度正確以進行預測
+        pred = {}
+        for yname, b_vec in self.beta.items():
+            pred[yname] = (X_ @ b_vec.reshape(-1, 1)).flatten()
+        return pd.DataFrame(pred, index=df_design.index)
 
     def local_jacobian(self) -> np.ndarray:
         J = np.zeros((2, 6), dtype=float)
         for i, y in enumerate(["delta_s2", "delta_s3"]):
             if y in self.beta:
+                # 係數從 index 1 開始，因為 index 0 是截距
                 J[i, :] = self.beta[y][1:]
         return J
 
@@ -171,6 +183,28 @@ class LengthModelHuber:
         self.model_s3.fit(X_aug, df["delta_s3"].to_numpy(dtype=float))
         return self
 
+    def get_coefficients_df(self) -> Optional[pd.DataFrame]:
+        """[新增] 將模型係數轉換為 DataFrame。"""
+        if not self._aug_names:
+            return None
+
+        coef_data = {}
+        # 處理 delta_s2
+        s2_coefs = self.model_s2.coef_
+        s2_intercept = self.model_s2.intercept_
+        s2_series = pd.Series(s2_coefs, index=self._aug_names)
+        s2_series["intercept"] = s2_intercept
+        coef_data["delta_s2"] = s2_series
+
+        # 處理 delta_s3
+        s3_coefs = self.model_s3.coef_
+        s3_intercept = self.model_s3.intercept_
+        s3_series = pd.Series(s3_coefs, index=self._aug_names)
+        s3_series["intercept"] = s3_intercept
+        coef_data["delta_s3"] = s3_series
+
+        return pd.DataFrame(coef_data).fillna(0)
+
     def predict_df(self, df_design: pd.DataFrame) -> pd.DataFrame:
         X_aug = self._prepare_X(df_design, fit=False)
         return pd.DataFrame(
@@ -265,26 +299,65 @@ class LengthModelHuber:
 
 
 class AngleModelBase:
-    def __init__(self, add_sincos: bool = True, add_ratios: bool = False):
+    def __init__(
+        self,
+        add_sincos: bool = True,
+        add_ratios: bool = False,
+        add_interactions: bool = False,
+    ):
         self.add_sincos = bool(add_sincos)
         self.add_ratios = bool(add_ratios)
+        self.add_interactions = bool(add_interactions)
         self.feat_names_: List[str] = []
+        self.poly_transformer: Optional[PolynomialFeatures] = None
 
-    def _augment(self, X: np.ndarray) -> np.ndarray:
-        s1, s2, s3, a3, a1, a2 = X[:, 0], X[:, 1], X[:, 2], X[:, 3], X[:, 4], X[:, 5]
-        feats = [s1, s2, s3, a3, a1, a2]
-        names = ["s1", "s2", "s3", "a3", "a1", "a2"]
+    def _augment(self, X: np.ndarray, fit_transformer: bool = False) -> np.ndarray:
+        # [修改] 邏輯重構以分離交互作用
+        s1, s2, s3, a3, a1, a2 = (X[:, i] for i in range(6))
+
+        # 永遠從原始特徵開始
+        final_feats = [s1, s2, s3, a3, a1, a2]
+        final_names = ["s1", "s2", "s3", "a3", "a1", "a2"]
+
+        # 1. 處理僅限原始特徵的交互作用
+        if self.add_interactions:
+            if fit_transformer:
+                self.poly_transformer = PolynomialFeatures(
+                    degree=2, interaction_only=True, include_bias=False
+                )
+                # 只對原始 6 個特徵做 fit_transform
+                interaction_features = self.poly_transformer.fit_transform(X)
+                # 取得交互作用項的名稱 (例如 's1 s2')
+                interaction_names = self.poly_transformer.get_feature_names_out(
+                    FEATURES
+                )
+
+                # 將原始特徵和交互作用項合併
+                final_feats = list(interaction_features.T)
+                final_names = list(interaction_names)
+            else:
+                if self.poly_transformer is None:
+                    raise RuntimeError("Polynomial transformer has not been fitted.")
+                interaction_features = self.poly_transformer.transform(X)
+                final_feats = list(interaction_features.T)
+                final_names = list(
+                    self.poly_transformer.get_feature_names_out(FEATURES)
+                )
+
+        # 2. 獨立加入 Ratio 特徵
         if self.add_ratios:
             eps = 1e-9
-            feats += [
+            final_feats += [
                 s1 / np.clip(s2, eps, None),
                 s1 / np.clip(s3, eps, None),
                 s2 / np.clip(s3, eps, None),
             ]
-            names += ["s1/s2", "s1/s3", "s2/s3"]
+            final_names += ["s1/s2", "s1/s3", "s2/s3"]
+
+        # 3. 獨立加入 Sin/Cos 特徵
         if self.add_sincos:
             r1, r2, r3 = np.deg2rad(a1), np.deg2rad(a2), np.deg2rad(a3)
-            feats += [
+            final_feats += [
                 np.sin(r1),
                 np.cos(r1),
                 np.sin(r2),
@@ -292,14 +365,22 @@ class AngleModelBase:
                 np.sin(r3),
                 np.cos(r3),
             ]
-            names += ["sin(a1)", "cos(a1)", "sin(a2)", "cos(a2)", "sin(a3)", "cos(a3)"]
-        self.feat_names_ = names
-        return np.column_stack(feats)
+            final_names += [
+                "sin(a1)",
+                "cos(a1)",
+                "sin(a2)",
+                "cos(a2)",
+                "sin(a3)",
+                "cos(a3)",
+            ]
+
+        # 最終組合
+        self.feat_names_ = final_names
+        return np.column_stack(final_feats)
 
     def local_jacobian_numeric(self, x: np.ndarray, h: float = 1e-4) -> np.ndarray:
         def f(xx: np.ndarray) -> float:
             df_tmp = pd.DataFrame([dict(zip(FEATURES, xx))])
-            # 【邏輯更新】使用新的目標名稱
             return float(self.predict_df(df_tmp)["DIP_a3(deg)"].iloc[0])
 
         J = np.zeros(6, dtype=float)
@@ -312,32 +393,59 @@ class AngleModelBase:
 
 
 class AngleModelOLS(AngleModelBase):
-    def __init__(self, degree=2, ridge=1e-2, add_sincos=True, add_ratios=False):
-        super().__init__(add_sincos, add_ratios)
+    def __init__(
+        self,
+        degree=2,
+        ridge=1e-2,
+        add_sincos=True,
+        add_ratios=False,
+        add_interactions=False,
+    ):
+        super().__init__(add_sincos, add_ratios, add_interactions)
         self.degree = int(degree)
         self.ridge = float(ridge)
-        self.poly: Optional[PolynomialFeatures] = None
+        self.poly_deg_n: Optional[PolynomialFeatures] = (
+            None  # 用於處理 > 2 次方的多項式
+        )
         self.beta: Optional[np.ndarray] = None
+        self.feature_names_out_: List[str] = []
 
     def _design(self, X: np.ndarray) -> np.ndarray:
-        X_aug = self._augment(X)
-        if self.degree > 1:
-            if self.poly is None:
-                self.poly = PolynomialFeatures(self.degree, include_bias=True)
-            return (
-                self.poly.fit_transform(X_aug)
-                if self.beta is None
-                else self.poly.transform(X_aug)
+        # 使用父類別的方法產生所有特徵
+        X_aug = super()._augment(X, fit_transformer=(self.beta is None))
+
+        # 如果已經有交互作用，或者 degree <= 1，就不再做多項式展開
+        if self.add_interactions or self.degree <= 1:
+            self.feature_names_out_ = ["intercept"] + self.feat_names_
+            return np.hstack([np.ones((X_aug.shape[0], 1)), X_aug])
+
+        # 處理 > 2 次方的多項式
+        if self.poly_deg_n is None:
+            self.poly_deg_n = PolynomialFeatures(self.degree, include_bias=True)
+
+        if self.beta is None:  # fit
+            Phi = self.poly_deg_n.fit_transform(X_aug)
+            self.feature_names_out_ = self.poly_deg_n.get_feature_names_out(
+                self.feat_names_
             )
-        return np.hstack([np.ones((X_aug.shape[0], 1)), X_aug])
+        else:  # predict
+            Phi = self.poly_deg_n.transform(X_aug)
+
+        return Phi
 
     def fit(self, df: pd.DataFrame):
         d = df[FEATURES + TARGETS].dropna().copy()
         Phi = self._design(d[FEATURES].to_numpy(dtype=float))
-        # 【邏輯更新】使用新的目標名稱
+
         y = d["DIP_a3(deg)"].to_numpy(dtype=float).reshape(-1, 1)
         K = Phi.T @ Phi + self.ridge * np.eye(Phi.shape[1])
         self.beta = (np.linalg.inv(K) @ (Phi.T @ y)).ravel()
+
+    def get_coefficients_df(self) -> Optional[pd.DataFrame]:
+        if self.beta is None or len(self.feature_names_out_) == 0:
+            return None
+        s = pd.Series(self.beta, index=self.feature_names_out_)
+        return s.to_frame(name="DIP_a3(deg)")
 
     def predict_df(self, df_design: pd.DataFrame) -> pd.DataFrame:
         Phi = self._design(df_design[FEATURES].to_numpy(dtype=float))
@@ -346,7 +454,6 @@ class AngleModelOLS(AngleModelBase):
             if self.beta is not None
             else np.zeros(len(df_design))
         )
-        # 【邏輯更新】使用新的目標名稱
         return pd.DataFrame({"DIP_a3(deg)": yhat}, index=df_design.index)
 
 
@@ -359,8 +466,9 @@ class AngleModelHuber(AngleModelBase):
         scale=True,
         add_sincos=True,
         add_ratios=False,
+        add_interactions=False,
     ):
-        super().__init__(add_sincos, add_ratios)
+        super().__init__(add_sincos, add_ratios, add_interactions)
         self.scale = bool(scale)
         self.scaler: Optional[StandardScaler] = None
         self.model = HuberRegressor(
@@ -369,18 +477,26 @@ class AngleModelHuber(AngleModelBase):
 
     def fit(self, df: pd.DataFrame):
         d = df[FEATURES + TARGETS].dropna().copy()
-        X_aug = self._augment(d[FEATURES].to_numpy(dtype=float))
+        X_aug = self._augment(d[FEATURES].to_numpy(dtype=float), fit_transformer=True)
         if self.scale:
             self.scaler = StandardScaler().fit(X_aug)
             X_aug = self.scaler.transform(X_aug)
-        # 【邏輯更新】使用新的目標名稱
         self.model.fit(X_aug, d["DIP_a3(deg)"].to_numpy(dtype=float))
+
+    def get_coefficients_df(self) -> Optional[pd.DataFrame]:
+        if not hasattr(self.model, "coef_") or len(self.feat_names_) == 0:
+            return None
+
+        coefs = self.model.coef_
+        intercept = self.model.intercept_
+        s = pd.Series(coefs, index=self.feat_names_)
+        s["intercept"] = intercept
+        return s.to_frame(name="DIP_a3(deg)")
 
     def predict_df(self, df_design: pd.DataFrame) -> pd.DataFrame:
         X_aug = self._augment(df_design[FEATURES].to_numpy(dtype=float))
         if self.scale and self.scaler:
             X_aug = self.scaler.transform(X_aug)
-        # 【邏輯更新】使用新的目標名稱
         return pd.DataFrame(
             {"DIP_a3(deg)": self.model.predict(X_aug)}, index=df_design.index
         )
@@ -395,8 +511,9 @@ class AngleModelRF(AngleModelBase):
         random_state=42,
         add_sincos=True,
         add_ratios=False,
+        add_interactions=False,
     ):
-        super().__init__(add_sincos, add_ratios)
+        super().__init__(add_sincos, add_ratios, add_interactions)
         self.model = RandomForestRegressor(
             n_estimators=int(n_estimators),
             max_depth=max_depth,
@@ -407,13 +524,11 @@ class AngleModelRF(AngleModelBase):
 
     def fit(self, df: pd.DataFrame):
         d = df[FEATURES + TARGETS].dropna().copy()
-        X_aug = self._augment(d[FEATURES].to_numpy(dtype=float))
-        # 【邏輯更新】使用新的目標名稱
+        X_aug = self._augment(d[FEATURES].to_numpy(dtype=float), fit_transformer=True)
         self.model.fit(X_aug, d["DIP_a3(deg)"].to_numpy(dtype=float))
 
     def predict_df(self, df_design: pd.DataFrame) -> pd.DataFrame:
         X_aug = self._augment(df_design[FEATURES].to_numpy(dtype=float))
-        # 【邏輯更新】使用新的目標名稱
         return pd.DataFrame(
             {"DIP_a3(deg)": self.model.predict(X_aug)}, index=df_design.index
         )

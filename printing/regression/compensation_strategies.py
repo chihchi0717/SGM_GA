@@ -212,7 +212,7 @@ def compensate_with_genetic_algorithm(
     target_design,
     df_train,
     pop_size=500,
-    generations=200,
+    generations=100,
     mutation_rate=0.2,
     crossover_rate=0.7,
     tournament_size=10,
