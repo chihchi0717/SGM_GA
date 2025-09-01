@@ -19,6 +19,11 @@ import random
 import traceback
 from datetime import datetime
 import numpy as np
+import pandas as pd
+import joblib
+
+from printing.regression.compensation_models import LengthModelRF, AngleModelRF
+from printing.regression.compensation_utils import apply_geometric_constraints
 
 # === 你的外部模組（可用假模組） ===
 from draw_New import draw_
@@ -70,6 +75,67 @@ log_dir = r"C:\Users\user\OneDrive - NTHU\home"
 # log_dir = os.path.join(BASE_DIR, "es_run")
 os.makedirs(save_root, exist_ok=True)
 os.makedirs(log_dir, exist_ok=True)
+
+# --- Regression models for printing compensation ---
+MODEL_DIR = os.path.join(BASE_DIR, "printing", "regression")
+LEN_MODEL_PATH = os.path.join(MODEL_DIR, "length_model.pkl")
+ANG_MODEL_PATH = os.path.join(MODEL_DIR, "angle_model.pkl")
+model_len: LengthModelRF | None = None
+model_ang: AngleModelRF | None = None
+
+
+def load_compensation_models() -> None:
+    """Lazily load regression models used for geometric compensation."""
+    global model_len, model_ang
+    if model_len is None or model_ang is None:
+        try:
+            model_len = joblib.load(LEN_MODEL_PATH)
+            model_ang = joblib.load(ANG_MODEL_PATH)
+        except Exception as e:
+            raise RuntimeError(f"無法載入補償模型: {e}")
+
+
+def compensate_design(individual: list[float]) -> list[float]:
+    """Use regression models to compensate design parameters before CAD."""
+    load_compensation_models()
+    s1, s2, a1 = individual
+    s3 = math.sqrt(s1 ** 2 + s2 ** 2 - 2 * s1 * s2 * math.cos(math.radians(a1)))
+    a3 = math.degrees(
+        math.acos((s1 ** 2 + s2 ** 2 - s3 ** 2) / (2 * s1 * s2 + 1e-9))
+    )
+    a2 = 180 - a1 - a3
+
+    df = pd.DataFrame(
+        [
+            {
+                "Design_s1(mm)": s1,
+                "Design_s2(mm)": s2,
+                "Design_s3(mm)": s3,
+                "Design_a3(deg)": a3,
+                "Design_a1(deg)": a1,
+                "Design_a2(deg)": a2,
+            }
+        ]
+    )
+    y_len = model_len.predict_df(df)
+    y_ang = model_ang.predict_df(df)
+
+    s2_c = s2 + y_len["delta_s2"].iloc[0]
+    s3_c = s3 + y_len["delta_s3"].iloc[0]
+    a3_c = a3 + y_ang["DIP_a3(deg)"].iloc[0]
+
+    design_c = apply_geometric_constraints(
+        {
+            "Design_s2(mm)": s2_c,
+            "Design_s3(mm)": s3_c,
+            "Design_a3(deg)": a3_c,
+        }
+    )
+    return [
+        design_c["Design_s1(mm)"],
+        design_c["Design_s2(mm)"],
+        design_c["Design_a1(deg)"],
+    ]
 
 # ---------- 工具 ----------
 
@@ -261,10 +327,11 @@ def is_duplicate_history(
 
 
 def build_model_with_retry(individual, folder, max_attempts=3):
+    design_c = compensate_design(individual)
     for k in range(max_attempts):
         try:
             result, logs = Build_model(
-                individual,
+                design_c,
                 mode="triangle",
                 folder=folder,
                 fillet=1,
