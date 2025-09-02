@@ -8,8 +8,9 @@
     v))
 
 (define (set-prism-material)
-  (property:apply-material (entity 2) "New" "index1.3" (gvector 0 0 0)))
-
+  (property:apply-material (entity 2) "New" "index1.2536" (gvector 0 0 0)))
+  ;;(property:apply-material (entity 2) "SCHOTT" "BK7" (gvector 0 0 0))
+  ;;(property:apply-surface (entity 2) (list "rough03" "New") (gvector 0 0 0) (gvector 0 0 0) (position 0 0 0) (gvector 1 0 0))
 (define (apply-source)
   (edit:add-selection (tools:face-in-body 3 (entity 1)))
   (property:apply-flux-surface-source (tools:face-in-body 3 (entity 1)) 0.3 1000 2 #f))
@@ -19,7 +20,7 @@
   (analysis:candela-up (gvector -1 0 0))
   (analysis:candela-ray-type "missed")
   (analysis:candela-symmetry "none")
-  (analysis:candela-distribution 1 #t 540 #t #f)
+  (analysis:candela-distribution 1 #f 540 #t #f)
   (analysis:candela-distribution-luminaire 180)
   (analysis:candela-distribution-max #f 0)
   (analysis:candela-distribution-min #f 0)
@@ -29,13 +30,14 @@
 
 (define (simulate)
   (insert:part "prism_sat_file-sim.SAT")
-  (view:profiles "xy")
+  (view:profiles "yx")
   (view:zoom-all)
   (set-prism-material)
   (apply-source)
   (setup-candela)
 
   ;; simulation loop parameters
+  ;; (define ang_ini -80)
   (define ang_ini 10)
   (define end 80)
   (define angle 10)
@@ -52,12 +54,16 @@
     (entity:rotate (entity 1) center_x center_y center_z 0 0 1 angle)
     (raytrace:source)
     (let ((bmp_path (string-append output_path "view-" angstr ".bmp"))
+          (pcd_path (string-append output_path "polar-" angstr ".bmp"))
           (txt_path (string-append output_path "polar-" angstr ".txt"))
+          (oml_path (string-append output_path "oml-" angstr ".OML"))
           (rect_bmp (string-append output_path "RCD-" angstr ".bmp")))
       (file:save-as bmp_path)
       (analysis:candela-save-bmp "rectangular-distribution" rect_bmp)
-      (analysis:candela-save-txt "polar-distribution" txt_path 361)))
-
+      (analysis:candela-save-bmp "polar-distribution" pcd_path)  
+      (analysis:candela-save-txt "polar-distribution" txt_path 561))
+      )
+      
   ;; create completion marker
 
   

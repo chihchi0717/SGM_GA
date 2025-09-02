@@ -8,7 +8,7 @@ compensation_strategies.py
 import numpy as np
 import pandas as pd
 import random
-from compensation_utils import (
+from .compensation_utils import (
     FEATURES,
     apply_geometric_constraints,
     precomp_in_deviation_space,
@@ -212,7 +212,7 @@ def compensate_with_genetic_algorithm(
     target_design,
     df_train,
     pop_size=500,
-    generations=100,
+    generations=10,
     mutation_rate=0.2,
     crossover_rate=0.7,
     tournament_size=10,

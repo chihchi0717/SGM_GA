@@ -55,6 +55,8 @@ def build_models(args, df_train):
             add_ratios=args.len_add_ratios,
             add_sincos=args.len_add_sincos,
             add_interactions=args.add_interactions,
+            # [新增] 傳入長度模型的角度*角度交互作用開關
+            add_aa_interact=args.add_len_aa_interact,
         )
     else:  # rf
         model_len = LengthModelRF(
@@ -67,6 +69,8 @@ def build_models(args, df_train):
             max_features=args.len_rf_max_features,
             criterion=args.len_rf_criterion,
             add_interactions=args.add_interactions,
+            # [新增] 傳入長度模型的角度*角度交互作用開關
+            add_aa_interact=args.add_len_aa_interact,
         )
     model_len.fit(df_train)
 
@@ -78,6 +82,7 @@ def build_models(args, df_train):
             add_sincos=args.add_angle_sincos,
             add_ratios=args.add_ratios,
             add_interactions=args.add_angle_interactions,
+            add_aa_interact=args.add_angle_aa_interact,
         )
     elif args.angle_model == "huber":
         model_ang = AngleModelHuber(
@@ -88,6 +93,7 @@ def build_models(args, df_train):
             add_sincos=args.add_angle_sincos,
             add_ratios=args.add_ratios,
             add_interactions=args.add_angle_interactions,
+            add_aa_interact=args.add_angle_aa_interact,
         )
     else:  # rf
         model_ang = AngleModelRF(
@@ -98,6 +104,7 @@ def build_models(args, df_train):
             add_sincos=args.add_angle_sincos,
             add_ratios=args.add_ratios,
             add_interactions=args.add_angle_interactions,
+            add_aa_interact=args.add_angle_aa_interact,
         )
     model_ang.fit(df_train)
 
@@ -123,66 +130,80 @@ def main():
         "--cv", type=str, default="0", help="交叉驗證：整數 K-fold 或 'loso'"
     )
     ap.add_argument("--save-report", type=str, default=None, help="儲存評估報告的路徑")
-    ap.add_argument(
-        "--add-interactions", action="store_true", help="為【長度模型】加入交互作用特徵"
-    )
 
     # 長度模型參數
-    ap.add_argument(
+    group_len = ap.add_argument_group("Length Model Parameters")
+    group_len.add_argument(
         "--length-model", type=str, default="huber", choices=["ols", "huber", "rf"]
     )
-    ap.add_argument("--len-huber-alpha", type=float, default=1e-3)
-    ap.add_argument("--len-huber-eps", type=float, default=1.35)
-    ap.add_argument("--len-huber-max-iter", type=int, default=2000)
-    ap.add_argument("--scale-length", action="store_true")
-    ap.add_argument("--len-rf-n-est", type=int, default=300)
-    ap.add_argument("--len-rf-max-depth", type=int, default=None)
-    ap.add_argument("--len-rf-min-leaf", type=int, default=1)
-    ap.add_argument("--len-rf-max-features", type=float, default=1.0)
-    ap.add_argument("--len-rf-criterion", type=str, default="squared_error")
-    ap.add_argument("--len-add-ratios", action="store_true")
-    ap.add_argument("--len-add-sincos", action="store_true")
+    group_len.add_argument(
+        "--add-interactions",
+        action="store_true",
+        help="為【長度模型】加入 '邊長*邊長' 和 '邊長*角度' 交互作用",
+    )
+    group_len.add_argument(
+        "--add-len-aa-interact",
+        action="store_true",
+        help="【新增】為【長度模型】加入 '角度*角度' 交互作用",
+    )
+    group_len.add_argument("--len-huber-alpha", type=float, default=1e-3)
+    group_len.add_argument("--len-huber-eps", type=float, default=1.35)
+    group_len.add_argument("--len-huber-max-iter", type=int, default=2000)
+    group_len.add_argument("--scale-length", action="store_true")
+    group_len.add_argument("--len-rf-n-est", type=int, default=300)
+    group_len.add_argument("--len-rf-max-depth", type=int, default=None)
+    group_len.add_argument("--len-rf-min-leaf", type=int, default=1)
+    group_len.add_argument("--len-rf-max-features", type=float, default=1.0)
+    group_len.add_argument("--len-rf-criterion", type=str, default="squared_error")
+    group_len.add_argument("--len-add-ratios", action="store_true")
+    group_len.add_argument("--len-add-sincos", action="store_true")
 
     # 角度模型參數
-    ap.add_argument(
+    group_ang = ap.add_argument_group("Angle Model Parameters")
+    group_ang.add_argument(
         "--angle-model", type=str, default="rf", choices=["ols", "rf", "huber"]
     )
-    ap.add_argument(
+    group_ang.add_argument(
+        "--add-angle-interactions",
+        action="store_true",
+        help="為【角度模型】加入 '邊長*邊長' 和 '邊長*角度' 交互作用",
+    )
+    group_ang.add_argument(
+        "--add-angle-aa-interact",
+        action="store_true",
+        help="【新增】為【角度模型】加入 '角度*角度' 交互作用",
+    )
+    group_ang.add_argument(
         "--angle-poly",
         type=int,
         default=2,
         help="OLS 角度模型的多項式階數 (若啟用交互作用則此項無效)",
     )
-    ap.add_argument("--angle-ridge", type=float, default=1e-2)
-    ap.add_argument("--rf-n-est", type=int, default=300)
-    ap.add_argument("--rf-max-depth", type=int, default=None)
-    ap.add_argument("--rf-min-leaf", type=int, default=1)
-    ap.add_argument(
+    group_ang.add_argument("--angle-ridge", type=float, default=1e-2)
+    group_ang.add_argument("--rf-n-est", type=int, default=300)
+    group_ang.add_argument("--rf-max-depth", type=int, default=None)
+    group_ang.add_argument("--rf-min-leaf", type=int, default=1)
+    group_ang.add_argument(
         "--angle-huber-max-iter",
         type=int,
         default=2000,
         help="角度 Huber 模型的最大迭代次數",
     )
-    ap.add_argument(
-        "--add-angle-interactions",
-        action="store_true",
-        help="為【角度模型】加入二次交互作用特徵",
-    )
-    ap.add_argument(
+    group_ang.add_argument(
         "--angle-huber-alpha",
         type=float,
         default=1e-3,
         help="角度 Huber 模型的 Alpha (正規化強度)",
     )
-    ap.add_argument(
+    group_ang.add_argument(
         "--angle-huber-eps",
         type=float,
         default=1.35,
         help="角度 Huber 模型的 Epsilon (穩健性參數)",
     )
-    ap.add_argument("--scale-angle", action="store_true")
-    ap.add_argument("--add-angle-sincos", action="store_true")
-    ap.add_argument("--add-ratios", action="store_true")
+    group_ang.add_argument("--scale-angle", action="store_true")
+    group_ang.add_argument("--add-angle-sincos", action="store_true")
+    group_ang.add_argument("--add-ratios", action="store_true")
 
     # 策略選擇開關
     ap.add_argument(
@@ -190,28 +211,22 @@ def main():
         type=str,
         default="jacobian",
         choices=["jacobian", "direct", "search", "ga"],
-        help="選擇補償策略: 'jacobian' (使用Jacobian矩陣) 或 'direct' (直接回饋)",
+        help="選擇補償策略",
     )
     args = ap.parse_args()
 
-    # [修正] 將 strategy 參數轉為小寫，使其不區分大小寫
     if args.strategy:
         args.strategy = args.strategy.lower()
 
     # --- 1. 讀取與處理資料 ---
+    print(f"\n[資料處理] 讀取檔案: {args.file} | 工作表: {args.sheet}")
     try:
         df_raw = pd.read_excel(args.file, sheet_name=args.sheet)
     except FileNotFoundError:
         print(f"錯誤：找不到檔案 '{args.file}'。請確認檔案路徑是否正確。")
         sys.exit(1)
 
-    # [修正] 增加對必要欄位的檢查，並使用正確的欄位名稱
-    required_columns = FEATURES + [
-        "DIP_s2(mm)",
-        "DIP_s3(mm)",
-        "DIP_a3(deg)",
-    ]
-
+    required_columns = FEATURES + ["DIP_s2(mm)", "DIP_s3(mm)", "DIP_a3(deg)"]
     missing_columns = [col for col in required_columns if col not in df_raw.columns]
 
     if missing_columns:
@@ -220,8 +235,7 @@ def main():
         print(f"檔案中找到的欄位: {', '.join(df_raw.columns)}")
         sys.exit(1)
 
-    # [修正] 根據您的回饋，將目標變數改為相對誤差率
-    eps = 1e-9  # 避免除以零
+    eps = 1e-9
     df_raw["delta_s2"] = (df_raw["Design_s2(mm)"] - df_raw["DIP_s2(mm)"]) / (
         df_raw["Design_s2(mm)"] + eps
     )
@@ -231,7 +245,6 @@ def main():
 
     df_use = average_by_structure(df_raw) if args.average else df_raw.copy()
 
-    # 在訓練前，確保移除任何包含 NaN 的資料列，避免模型出錯
     initial_rows = len(df_use)
     df_use.dropna(subset=FEATURES + TARGETS, inplace=True)
     if len(df_use) < initial_rows:
@@ -250,9 +263,9 @@ def main():
 
     # --- 3. 執行補償策略 ---
     target_design_independent = {
-        "Design_s2(mm)": 0.59,#0.75,
-        "Design_s3(mm)": 0.59,#0.69,
-        "Design_a3(deg)": 33,#58,
+        "Design_s2(mm)": 0.59,
+        "Design_s3(mm)": 0.59,
+        "Design_a3(deg)": 33,
     }
     target_design = apply_geometric_constraints(target_design_independent)
 
@@ -295,12 +308,10 @@ def main():
     final_pred_ds3 = final_pred_len["delta_s3"].iloc[0]
     final_pred_ma3 = final_pred_ang["DIP_a3(deg)"].iloc[0]
 
-    # [修正] 根據您的回饋，使用正確的公式反推最終成品尺寸
     final_s2_pred = compensated_design["Design_s2(mm)"] * (1 - final_pred_ds2)
     final_s3_pred = compensated_design["Design_s3(mm)"] * (1 - final_pred_ds3)
-    final_a3_pred = final_pred_ma3  # 角度模型預測的是絕對值，維持不變
+    final_a3_pred = final_pred_ma3
 
-    # 使用預測出的 s2, s3, a3，透過幾何約束反算出 s1, a1, a2
     final_product_independent = {
         "Design_s2(mm)": final_s2_pred,
         "Design_s3(mm)": final_s3_pred,
@@ -308,20 +319,12 @@ def main():
     }
     final_product_all = apply_geometric_constraints(final_product_independent)
 
-    final_s1 = final_product_all["Design_s1(mm)"]
-    final_s2 = final_product_all["Design_s2(mm)"]
-    final_s3 = final_product_all["Design_s3(mm)"]
-    final_a1 = final_product_all["Design_a1(deg)"]
-    final_a2 = final_product_all["Design_a2(deg)"]
-    final_a3 = final_product_all["Design_a3(deg)"]
-
     print("\n  - 預測的最終成品尺寸:")
-    print(f"    - s1: {final_s1:.6f} mm (目標: {target_design['Design_s1(mm)']:.6f})")
-    print(f"    - s2: {final_s2:.6f} mm (目標: {target_design['Design_s2(mm)']:.6f})")
-    print(f"    - s3: {final_s3:.6f} mm (目標: {target_design['Design_s3(mm)']:.6f})")
-    print(f"    - a1: {final_a1:.6f} deg (目標: {target_design['Design_a1(deg)']:.6f})")
-    print(f"    - a2: {final_a2:.6f} deg (目標: {target_design['Design_a2(deg)']:.6f})")
-    print(f"    - a3: {final_a3:.6f} deg (目標: {target_design['Design_a3(deg)']:.6f})")
+    for key, target_val in target_design.items():
+        pred_val = final_product_all[key]
+        print(
+            f"    - {key.replace('Design_', '')}: {pred_val:.6f} (目標: {target_val:.6f})"
+        )
 
     # --- 5. 執行評估與儲存報告 ---
     if args.eval or args.cv != "0" or args.save_report:
@@ -353,7 +356,6 @@ def main():
                     loso_overall.to_excel(xl, index=False, sheet_name="loso_cv_overall")
                     loso_detail.to_excel(xl, index=False, sheet_name="loso_cv_detail")
 
-                # [新增] 儲存模型係數
                 if hasattr(model_len, "get_coefficients_df"):
                     len_coeffs = model_len.get_coefficients_df()
                     if len_coeffs is not None:
@@ -366,7 +368,6 @@ def main():
                         ang_coeffs.to_excel(xl, sheet_name="ang_model_coeffs")
                         print("    - 已儲存角度模型係數")
 
-                # 儲存本次執行的參數設定
                 params_df = pd.DataFrame([vars(args)])
                 params_df.to_excel(xl, index=False, sheet_name="run_parameters")
 
@@ -375,11 +376,7 @@ def main():
 
 if __name__ == "__main__":
     try:
-        # 確保終端機能正確顯示中文字元
         sys.stdout.reconfigure(encoding="utf-8")
     except Exception:
         pass
     main()
-
-
-# python main.py --average --eval --cv 5 --length-model huber --len-huber-alpha 1 --len-huber-eps 1000 --len-huber-max-iter 10000 --scale-length --add-interactions --len-add-ratios --len-add-sincos --angle-model huber --angle-huber-alpha 1e-1 --angle-huber-eps 1000 --scale-angle --angle-ridge 0.01 --angle-huber-max-iter 10000  --add-angle-interactions  --add-ratios --save-report "model_report0831.xlsx" --strategy ga
