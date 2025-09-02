@@ -3,7 +3,7 @@ TracePro Release: 3 2 0
 Polar Candela Distribution Data for 
 Data covers +/- 180.000 degrees from Normal
 Data for Missed Rays
-Data generated at 03:23:30 September 02, 2025
+Data generated at 11:18:27 September 02, 2025
 
 	   0.0	 180.0
 0.000	             0	             0	
@@ -198,8 +198,8 @@ Data generated at 03:23:30 September 02, 2025
 60.750	             0	             0	
 61.071	             0	             0	
 61.393	             0	             0	
-61.714	       656.932	             0	
-62.036	       656.932	             0	
+61.714	       643.347	             0	
+62.036	       643.347	             0	
 62.357	             0	             0	
 62.679	             0	             0	
 63.000	             0	             0	
@@ -224,8 +224,8 @@ Data generated at 03:23:30 September 02, 2025
 69.107	             0	             0	
 69.429	             0	             0	
 69.750	             0	             0	
-70.071	             0	             0	
-70.393	             0	             0	
+70.071	       15.5313	             0	
+70.393	       15.5313	             0	
 70.714	             0	             0	
 71.036	             0	             0	
 71.357	             0	             0	
@@ -264,8 +264,8 @@ Data generated at 03:23:30 September 02, 2025
 81.964	             0	             0	
 82.286	             0	             0	
 82.607	             0	             0	
-82.929	        615.02	             0	
-83.250	        615.02	             0	
+82.929	       305.606	             0	
+83.250	       305.606	             0	
 83.571	             0	             0	
 83.893	             0	             0	
 84.214	             0	             0	

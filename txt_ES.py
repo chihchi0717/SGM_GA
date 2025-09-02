@@ -78,9 +78,9 @@ def evaluate_fitness(
     folder,
     individual,
     return_uniformity=False,
-    eff_weight=0.7,
-    process_weight=0.3,
-    uni_weight=0.1,
+    eff_weight=1,
+    process_weight=1,
+    uni_weight=1,
 ):
     """Evaluate fitness from simulation results in *folder* for the given
     *individual* parameters.
@@ -100,7 +100,8 @@ def evaluate_fitness(
     efficiencies_per_angle = []  # store efficiency for each measurement angle
     upward_uni = []  # store upward energy standard deviation per angle when requested
 
-    weights = [1, 2, 5, 7, 5, 8.5, 1.5, 2]
+    # weights = [1, 2, 5, 7, 5, 8.5, 1.5, 2]
+    weights = [1, 1, 1, 1, 1, 1, 1, 1]
 
     for idx, angle in enumerate(range(10, 90, 10)):
         txt_path = os.path.join(folder, f"polar-{angle}.txt")
@@ -123,7 +124,7 @@ def evaluate_fitness(
                     intensity_col1 = float(parts[1])
                     total_energy += intensity_col1
                     angle_intensities.append(intensity_col1)
-                    if polar_angle > 100:
+                    if polar_angle > 90:
                         upward_energy += intensity_col1
                         if return_uniformity:
                             upward_values.append(intensity_col1)
@@ -155,7 +156,8 @@ def evaluate_fitness(
     if weight_sum == 0:
         efficiency = 0
     else:
-        efficiency = weighted_efficiency_total / weight_sum
+        # efficiency = weighted_efficiency_total / weight_sum
+        efficiency = weighted_efficiency_total 
 
     try:
         emd = compute_regression_score(S1, S2, A1)
@@ -170,10 +172,7 @@ def evaluate_fitness(
         uniformity = 0.0
 
     process_score = 1 / (1+emd) 
-    fitness = (
-        eff_weight * efficiency *  process_score
-        + uni_weight * uniformity
-    )
+    fitness = (eff_weight * efficiency )
 
     if return_uniformity:
         return (
