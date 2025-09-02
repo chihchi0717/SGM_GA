@@ -6,13 +6,15 @@ import time
 import math
 import shutil
 import random
+import argparse  # 匯入 argparse 模組
 import traceback
 from datetime import datetime
-from typing import Optional, Dict, Tuple
+from typing import Optional, Dict, Tuple, List
+from itertools import combinations
 
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import PolynomialFeatures, StandardScaler
+from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import HuberRegressor
 
 # === 你的外部模組（可用假模組） ===
@@ -41,30 +43,118 @@ FEATURES = [
 ]
 
 
-def _augment_features(X_raw: np.ndarray) -> np.ndarray:
-    """建立所有二階多項式特徵 (包含平方項與交互作用項)"""
-    poly = PolynomialFeatures(degree=2, interaction_only=False, include_bias=False)
-    return poly.fit_transform(X_raw)
+def augment_feats_for_lengths_custom_interactions(
+    X_raw: np.ndarray,
+    add_ratios: bool,
+    add_sincos: bool,
+    return_names: bool = False,
+    add_interactions: bool = False,
+    add_aa_interact: bool = False,
+):
+    """
+    對長度模型的特徵進行增強，交互作用項被拆分為獨立開關。
+    """
+    s1, s2, s3, a3, a1, a2 = (X_raw[:, i] for i in range(6))
+    final_feats = [s1, s2, s3, a3, a1, a2]
+    final_names = FEATURES.copy()
+
+    if add_ratios:
+        eps = 1e-9
+        final_feats += [
+            s1 / np.clip(s2, eps, None),
+            s1 / np.clip(s3, eps, None),
+            s2 / np.clip(s3, eps, None),
+        ]
+        final_names += ["r12", "r13", "r23"]
+
+    if add_sincos:
+        r1, r2, r3 = np.deg2rad(a1), np.deg2rad(a2), np.deg2rad(a3)
+        final_feats += [
+            np.sin(r1),
+            np.cos(r1),
+            np.sin(r2),
+            np.cos(r2),
+            np.sin(r3),
+            np.cos(r3),
+        ]
+        final_names += ["sin_a1", "cos_a1", "sin_a2", "cos_a2", "sin_a3", "cos_a3"]
+
+    s_features = {"s1": X_raw[:, 0], "s2": X_raw[:, 1], "s3": X_raw[:, 2]}
+    a_features = {"a3": X_raw[:, 3], "a1": X_raw[:, 4], "a2": X_raw[:, 5]}
+
+    if add_interactions:
+        # 邊長 * 邊長
+        for s_i, s_j in combinations(s_features.keys(), 2):
+            final_feats.append(s_features[s_i] * s_features[s_j])
+            final_names.append(f"{s_i}*{s_j}")
+        # 邊長 * 角度
+        for s_key in s_features:
+            for a_key in a_features:
+                final_feats.append(s_features[s_key] * a_features[a_key])
+                final_names.append(f"{s_key}*{a_key}")
+
+    if add_aa_interact:
+        for a_i, a_j in combinations(a_features.keys(), 2):
+            final_feats.append(a_features[a_i] * a_features[a_j])
+            final_names.append(f"{a_i}*{a_j}")
+
+    X_aug = np.column_stack(final_feats)
+
+    if return_names:
+        return X_aug, final_names
+    return X_aug
 
 
 class ModelHuber:
     """一個通用的 Huber 迴歸模型類別，封裝了特徵工程和縮放。"""
 
-    def __init__(self, scale: bool, alpha: float, epsilon: float, max_iter: int):
+    def __init__(
+        self,
+        scale: bool,
+        alpha: float,
+        epsilon: float,
+        max_iter: int,
+        add_ratios: bool = False,
+        add_sincos: bool = False,
+        add_interactions: bool = False,
+        add_aa_interact: bool = False,
+    ):
         self.scaler: Optional[StandardScaler] = None
         self.scale = scale
         self.model = HuberRegressor(
             alpha=alpha, epsilon=epsilon, max_iter=int(max_iter)
         )
+        self.add_ratios = add_ratios
+        self.add_sincos = add_sincos
+        self.add_interactions = add_interactions
+        self.add_aa_interact = add_aa_interact
+        self.feature_names_: List[str] = []
 
-    def _augment(self, X_raw: np.ndarray) -> np.ndarray:
-        return _augment_features(X_raw)
+    def _augment(self, X_raw: np.ndarray, fit_mode: bool = False) -> np.ndarray:
+        if fit_mode:
+            X_aug, names = augment_feats_for_lengths_custom_interactions(
+                X_raw,
+                add_ratios=self.add_ratios,
+                add_sincos=self.add_sincos,
+                return_names=True,
+                add_interactions=self.add_interactions,
+                add_aa_interact=self.add_aa_interact,
+            )
+            self.feature_names_ = names
+            return X_aug
+        else:
+            return augment_feats_for_lengths_custom_interactions(
+                X_raw,
+                add_ratios=self.add_ratios,
+                add_sincos=self.add_sincos,
+                add_interactions=self.add_interactions,
+                add_aa_interact=self.add_aa_interact,
+            )
 
     def fit(self, df: pd.DataFrame, target: str):
-        """訓練模型，並設定內部的特徵縮放器。"""
         d = df[FEATURES + [target]].dropna().copy()
         X_raw = d[FEATURES].to_numpy(dtype=float)
-        X_aug = self._augment(X_raw)
+        X_aug = self._augment(X_raw, fit_mode=True)
 
         if self.scale:
             self.scaler = StandardScaler()
@@ -73,12 +163,20 @@ class ModelHuber:
         self.model.fit(X_aug, d[target].to_numpy(dtype=float))
 
     def predict(self, df_features: pd.DataFrame) -> np.ndarray:
-        """使用訓練好的模型和縮放器進行預測。"""
         X_raw = df_features[FEATURES].to_numpy(dtype=float)
-        X_aug = self._augment(X_raw)
+        X_aug = self._augment(X_raw, fit_mode=False)
         if self.scale and self.scaler:
             X_aug = self.scaler.transform(X_aug)
         return self.model.predict(X_aug)
+
+    def get_coefficients_df(self) -> pd.DataFrame:
+        """取得模型係數並回傳 DataFrame"""
+        if not self.feature_names_ or not hasattr(self.model, "coef_"):
+            return pd.DataFrame()
+
+        s = pd.Series(self.model.coef_, index=self.feature_names_, name="coefficient")
+        s["_intercept"] = self.model.intercept_
+        return s.to_frame()
 
 
 # ==============================================================================
@@ -87,7 +185,6 @@ class ModelHuber:
 
 
 # === 路徑設定 ===
-# *** 修正 ***: 更新為您提供的 Excel 檔案路徑
 TRAIN_DATA_PATH = r".\printing\regression\analysis_results0831.xlsx"
 
 # --- 全域模型物件 ---
@@ -125,6 +222,19 @@ os.makedirs(log_dir, exist_ok=True)
 
 
 # ---------- 工具函式 ----------
+
+
+def save_model_report(models: Dict[str, ModelHuber], output_path: str):
+    """將多個模型的係數儲存到一個 Excel 檔案中"""
+    try:
+        with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+            for name, model in models.items():
+                df_coef = model.get_coefficients_df()
+                if not df_coef.empty:
+                    df_coef.to_excel(writer, sheet_name=name)
+        print(f"✅ 模型報告已成功儲存至：{output_path}")
+    except Exception as e:
+        print(f"❌ 儲存模型報告失敗：{e}")
 
 
 def write_run_config():
@@ -479,7 +589,6 @@ def is_duplicate_history(
         except Exception:
             continue
         if np.all(np.abs(x - y) <= tol):
-            # *** 修正 ***: 安全地將可能為空字串的欄位轉換為 float
             fitness = float(row.get("fitness") or 0.0)
             efficiency = float(row.get("efficiency") or 0.0)
             process_score = float(row.get("process_score") or 0.0)
@@ -529,13 +638,28 @@ def make_offspring(pop_genes, pop_sigmas):
     return children_genes, children_sigmas, parent_pairs
 
 
-def main():
+def main(args):
     global model_s2, model_s3, model_ang
 
     print("\n--- 初始化並訓練補償模型 ---")
-    model_s2 = ModelHuber(scale=True, alpha=1.0, epsilon=1000, max_iter=10000)
-    model_s3 = ModelHuber(scale=True, alpha=1.0, epsilon=1000, max_iter=10000)
-    model_ang = ModelHuber(scale=True, alpha=0.1, epsilon=1000, max_iter=10000)
+
+    # 根據命令列參數設定模型
+    model_kwargs = {
+        "scale": True,
+        "alpha": 1.0,
+        "epsilon": 1000,
+        "max_iter": 10000,
+        "add_ratios": args.add_ratios,
+        "add_sincos": args.add_sincos,
+        "add_interactions": args.add_interactions,
+        "add_aa_interact": args.add_aa_interact,
+    }
+
+    model_s2 = ModelHuber(**model_kwargs)
+    model_s3 = ModelHuber(**model_kwargs)
+    model_ang_kwargs = model_kwargs.copy()
+    model_ang_kwargs["alpha"] = 0.1
+    model_ang = ModelHuber(**model_ang_kwargs)
 
     try:
         df_train = pd.read_excel(TRAIN_DATA_PATH)
@@ -557,6 +681,20 @@ def main():
     except Exception as e:
         print(f"❌ 讀取或訓練時發生錯誤: {e}")
         return
+
+    # 如果指定了 --save-report，則儲存報告
+    if args.save_report:
+        all_models = {
+            "model_s2": model_s2,
+            "model_s3": model_s3,
+            "model_ang": model_ang,
+        }
+        save_model_report(all_models, args.save_report)
+        # 如果使用者只想存報告而不執行後續優化，可以在此結束
+        if args.report_only:
+            print("報告已儲存，程式結束。")
+            return
+
     print("---------------------------\n")
 
     copy_scm_to_all_folders()
@@ -602,7 +740,6 @@ def main():
         pop_sigmas = np.array(
             [[float(r["sigma1"]), float(r["sigma2"]), float(r["sigma3"])] for r in rows]
         )
-        # *** 修正 ***: 這裡的解析也需要與 create_log_row 的新結構匹配
         parent_eval_from_log = []
         for r in rows:
             fit = float(r.get("fitness") or 0.0)
@@ -721,8 +858,36 @@ def main():
 
 
 if __name__ == "__main__":
+    # 設定命令列參數解析器
+    parser = argparse.ArgumentParser(description="演化策略優化器與模型報告產生器")
+    parser.add_argument("--add-ratios", action="store_true", help="加入邊長比例特徵")
+    parser.add_argument(
+        "--add-sincos", action="store_true", help="加入角度的 sin/cos 特徵"
+    )
+    parser.add_argument(
+        "--add-interactions",
+        action="store_true",
+        help="加入邊長與角度的交互作用特徵 (s*s, s*a)",
+    )
+    parser.add_argument(
+        "--add-aa-interact",
+        action="store_true",
+        help="加入角度之間的交互作用特徵 (a*a)",
+    )
+    parser.add_argument(
+        "--save-report",
+        type=str,
+        metavar="FILENAME",
+        help="將模型係數儲存至指定的 Excel 檔名",
+    )
+    parser.add_argument(
+        "--report-only", action="store_true", help="僅儲存報告，不執行後續的演化策略"
+    )
+
+    cli_args = parser.parse_args()
+
     try:
-        main()
+        main(cli_args)
     except Exception as e:
         subject = "演化策略主程式發生致命錯誤"
         body = f"錯誤類型: {type(e).__name__}\n錯誤訊息: {e}\n\n追蹤訊息:\n{traceback.format_exc()}"

@@ -32,9 +32,9 @@ mpl.rcParams.update(
 )
 
 # === 設定 ===
-base_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\DOE\design[0.6, 0.9, 60]"
-excel_path = os.path.join(base_folder, "EXP_SIM_combined_fillet.xlsx")
-output_folder = os.path.join(base_folder, "EXP_SIM_FIGURES_fillet")
+base_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\DOE\design[0.9, 0.6, 60]"
+excel_path = os.path.join(base_folder, "EXP_SIM_combined.xlsx")
+output_folder = os.path.join(base_folder, "EXP_SIM_FIGURES")
 os.makedirs(output_folder, exist_ok=True)
 
 # --- 實驗數據標準化設定 (開關) ---
@@ -69,7 +69,11 @@ for sheet_name in xls.sheet_names:
         df = pd.read_excel(excel_path, sheet_name=sheet_name)
         # === 修改：自動偵測並排序所有實驗欄位 ===
         exp_columns = sorted(
-            [col for col in df.columns if col.startswith("EXP") and not col.startswith("EXP_angle")],
+            [
+                col
+                for col in df.columns
+                if col.startswith("EXP") and not col.startswith("EXP_angle")
+            ],
             key=custom_sort_key_for_exp_cols,
         )
         # === 選取模擬資料欄位，並依類型分開 ===
@@ -84,25 +88,9 @@ for sheet_name in xls.sheet_names:
         fig, ax1 = plt.subplots()
         ax2 = ax1.twinx()
 
-        # --- 繪製 Design 模擬 (綠色系) ---
+        # --- 繪製 Design 模擬 (黑色實線) ---
         if design_cols:
-            design_colors = plt.cm.Greens(np.linspace(0.5, 0.9, len(design_cols)))
-            for i, sim_col in enumerate(design_cols):
-                y_sim = df[sim_col].dropna().to_numpy()
-                x_sim = df["SIM_angle"].dropna().to_numpy()
-                total_sim_energy = y_sim.sum()
-                if total_sim_energy > 0:
-                    y_sim = y_sim / total_sim_energy * 100
-                else:
-                    continue
-                ax2.bar(x_sim, y_sim, width=0.8, label=sim_col, color=design_colors[i])
-
-        # --- 繪製 Shrinkage 模擬 (橘色系) ---
-        if shrinkage_cols:
-            shrinkage_colors = plt.cm.Oranges(
-                np.linspace(0.5, 0.9, len(shrinkage_cols))
-            )
-            for i, sim_col in enumerate(shrinkage_cols):
+            for sim_col in design_cols:
                 y_sim = df[sim_col].dropna().to_numpy()
                 x_sim = df["SIM_angle"].dropna().to_numpy()
                 total_sim_energy = y_sim.sum()
@@ -111,7 +99,32 @@ for sheet_name in xls.sheet_names:
                 else:
                     continue
                 ax2.bar(
-                    x_sim, y_sim, width=0.8, label=sim_col, color=shrinkage_colors[i]
+                    x_sim,
+                    y_sim,
+                    label="SIM_design",
+                    color="#343333",
+                    linestyle="-",
+                    linewidth=1.5,
+                )
+
+        # --- 繪製 Shrinkage 模擬 (紅色實線) ---
+        if shrinkage_cols:
+            for sim_col in shrinkage_cols:
+                y_sim = df[sim_col].dropna().to_numpy()
+                x_sim = df["SIM_angle"].dropna().to_numpy()
+                total_sim_energy = y_sim.sum()
+                if total_sim_energy > 0:
+                    y_sim = y_sim / total_sim_energy * 100
+                else:
+                    continue
+                ax2.bar(
+                    x_sim,
+                    y_sim,
+                    label="SIM_shrinkage",
+                    color="#D53500",
+                    linestyle="-",
+                    linewidth=1.5,
+                    alpha=0.7,
                 )
 
         # --- 實驗資料 (折線圖+散點) ---
@@ -147,16 +160,25 @@ for sheet_name in xls.sheet_names:
                         current_linestyle = linestyles[idx % len(linestyles)]
                         current_marker = markers[idx % len(markers)]
 
+                        # 取出 "EXP數字" 部分，重新命名
+                        match = re.match(r"EXP(\d+)", col)
+                        if match:
+                            exp_number = int(match.group(1))
+                            exp_label = f"EXP{exp_number}"   # 只保留 EXP1, EXP2, EXP3
+                        else:
+                            exp_label = col
+
                         ax1.plot(
                             x_exp,
                             y_exp_percent,
-                            label=f"{col}",
+                            label=exp_label,   # 用新的簡化名稱
                             color=current_color,
                             linestyle=current_linestyle,
                             marker=current_marker,
                             markersize=4,
                             alpha=0.8,
                         )
+
             else:
                 # --- 方法二：各實驗獨立標準化 ---
                 for idx, col in enumerate(exp_columns):
@@ -176,10 +198,16 @@ for sheet_name in xls.sheet_names:
                     current_linestyle = linestyles[idx % len(linestyles)]
                     current_marker = markers[idx % len(markers)]
 
+                    exp_mapping = {}
+                    new_index = 1
+                    for original_name in exp_columns:
+                        exp_mapping[original_name] = f"EXP{new_index}"
+                        new_index += 1
+
                     ax1.plot(
                         x_exp,
                         y_exp_percent,
-                        label=f"{col}",
+                        label=exp_mapping.get(col, col),  # 用重新編號的名稱
                         color=current_color,
                         linestyle=current_linestyle,
                         marker=current_marker,
@@ -190,29 +218,29 @@ for sheet_name in xls.sheet_names:
         # === 標籤與格式 ===
         ax1.set_xlabel("Angle (°)")
         ax1.set_xticks(np.arange(0, 181, 10))
-        ax1.set_ylabel("Measured Intensity (%)", color="royalblue")
-        ax2.set_ylabel("Simulated Intensity (%)", color="darkgreen")
+        ax1.set_ylabel("Measured Intensity (%)", color="steelblue")   # 左軸藍色
+        ax2.set_ylabel("Simulated Intensity (%)", color="#D53500")  # 右軸紅色
 
-        ax1.tick_params(axis="y", colors="royalblue")
-        ax2.tick_params(axis="y", colors="darkgreen")
-        ax1.spines["left"].set_color("royalblue")
+        ax1.tick_params(axis="y", colors="steelblue")
+        ax2.tick_params(axis="y", colors="#D53500")
+        ax1.spines["left"].set_color("steelblue")
         ax1.spines["left"].set_linewidth(1.2)
-        ax2.spines["right"].set_color("darkgreen")
+        ax2.spines["right"].set_color("#D53500")
         ax2.spines["right"].set_linewidth(1.2)
-        ax1.yaxis.label.set_color("royalblue")
-        ax2.yaxis.label.set_color("darkgreen")
+        ax1.yaxis.label.set_color("steelblue")
+        ax2.yaxis.label.set_color("#D53500")
 
         # === 圖例與標題 ===
         lines1, labels1 = ax1.get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
-        fig.legend(
-            lines1 + lines2,
-            labels1 + labels2,
-            loc="lower center",
-            bbox_to_anchor=(0.5, -0.15),
-            ncol=3,
-            fontsize=9,
-        )
+        # fig.legend(
+        #     lines1 + lines2,
+        #     labels1 + labels2,
+        #     loc="lower center",
+        #     bbox_to_anchor=(0.5, -0.1),
+        #     ncol=5,
+        #     fontsize=9,
+        # )
         ax1.set_ylim(bottom=0)
         ax2.set_ylim(bottom=0)
         plt.title(f"Elevation {sheet_name}° - EXP vs SIM", fontsize=12, weight="bold")
