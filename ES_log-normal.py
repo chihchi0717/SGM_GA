@@ -88,7 +88,7 @@ class ModelHuber:
 
 # === 路徑設定 ===
 # *** 修正 ***: 更新為您提供的 Excel 檔案路徑
-TRAIN_DATA_PATH = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\GA\SGM_GA\printing\regression\analysis_results0831.xlsx"
+TRAIN_DATA_PATH = r".\printing\regression\analysis_results0831.xlsx"
 
 # --- 全域模型物件 ---
 model_s2: Optional[ModelHuber] = None
@@ -119,7 +119,7 @@ random.seed(GLOBAL_SEED)
 np.random.seed(GLOBAL_SEED)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 save_root = os.path.join(BASE_DIR, "GA_population")
-log_dir = r"C:\Users\cchih\OneDrive - NTHU\msi"
+log_dir = r"C:\Users\user\OneDrive - NTHU\home"
 os.makedirs(save_root, exist_ok=True)
 os.makedirs(log_dir, exist_ok=True)
 
@@ -298,10 +298,10 @@ def evaluate_individual(individual: np.ndarray, folder: str) -> Tuple[Tuple, Dic
                 params_for_build,
                 mode="triangle",
                 folder=folder,
-                fillet=1,
+                fillet=0,
                 radius_vertex=0.051,
                 radius_inside=0.063,
-                light_source_length=0.5,
+                light_source_length=1,
             )
             for msg in logs:
                 print(msg)

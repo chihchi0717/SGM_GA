@@ -2,3 +2,6 @@ numpy
 pyautocad
 comtypes
 pywinauto
+pandas
+scikit-learn
+openpyxl
