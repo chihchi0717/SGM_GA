@@ -117,7 +117,7 @@ def main():
     ap.add_argument(
         "--file",
         type=str,
-        default="analysis_results0831.xlsx",
+        default="analysis_results_0.6_0.9.xlsx",
         help="輸入的 Excel 檔案路徑",
     )
     ap.add_argument("--sheet", type=str, default="Sheet1", help="Excel 中的工作表名稱")

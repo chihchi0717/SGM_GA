@@ -8,11 +8,21 @@ compensation_strategies.py
 import numpy as np
 import pandas as pd
 import random
-from .compensation_utils import (
-    FEATURES,
-    apply_geometric_constraints,
-    precomp_in_deviation_space,
-)
+
+try:
+    # 優先使用相對匯入 (適用於套件)
+    from .compensation_utils import (
+        FEATURES,
+        apply_geometric_constraints,
+        precomp_in_deviation_space,
+    )
+except ImportError:
+    # 當作為獨立腳本執行時，改用直接匯入
+    from compensation_utils import (
+        FEATURES,
+        apply_geometric_constraints,
+        precomp_in_deviation_space,
+    )
 
 
 def compensate_with_jacobian(
