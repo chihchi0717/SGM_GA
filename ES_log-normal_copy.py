@@ -408,9 +408,9 @@ def evaluate_individual(individual: np.ndarray, folder: str) -> Tuple[Tuple, Dic
                 params_for_build,
                 mode="triangle",
                 folder=folder,
-                fillet=0,
-                radius_vertex=0.051,
-                radius_inside=0.063,
+                fillet=2,
+                radius_vertex=0.036,
+                radius_inside=0.053,
                 light_source_length=1,
             )
             for msg in logs:
