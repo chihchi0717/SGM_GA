@@ -185,7 +185,7 @@ class ModelHuber:
 
 
 # === 路徑設定 ===
-TRAIN_DATA_PATH = r".\printing\regression\analysis_results0831.xlsx"
+TRAIN_DATA_PATH = r".\printing\regression\analysis_results_0.6_0.9.xlsx"
 
 # --- 全域模型物件 ---
 model_s2: Optional[ModelHuber] = None
@@ -197,8 +197,8 @@ model_ang: Optional[ModelHuber] = None
 POP_SIZE = 10
 OFFSPRING_SIZE = POP_SIZE * 7
 N_GENERATIONS = 100
-SIDE_BOUND = [0.3, 0.9]
-ANGLE_BOUND = [30.0, 150.0]
+SIDE_BOUND = [0.6, 0.9]
+ANGLE_BOUND = [30.0, 90.0]
 n = 3
 TAU_PRIME = 1 / np.sqrt(2 * n)
 TAU = 1 / np.sqrt(2 * np.sqrt(n))
