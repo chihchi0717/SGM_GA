@@ -755,9 +755,14 @@ def load_latest_state():
 
     try:
         df = pd.read_csv(last_path)
-        parent_rows = df[df["role"] == "parent"]
+        # 修正: 使用 .apply() 來處理整個 Series
+        is_aborted = (df["fitness"].apply(safe_float) == -9998.0).any()
 
-        if len(parent_rows) >= POP_SIZE:
+        # 檢查世代是否已完成的邏輯
+        parent_rows = df[df["role"] == "parent"]
+        is_complete = len(parent_rows) >= POP_SIZE and not is_aborted
+
+        if is_complete:
             start_gen = latest_gen_num + 1
             print(
                 f"🔁 偵測到已完成的第 {latest_gen_num} 代，將從第 {start_gen} 代開始。"
@@ -778,13 +783,14 @@ def load_latest_state():
             ]
             return start_gen, pop_genes, pop_sigmas, parent_eval, None
         else:
+            # 世代未完成，準備接續
             start_gen = latest_gen_num
-            # FIX: Special handling for incomplete Generation 1
-            if start_gen == 1:
-                print(f"⚠️ 偵測到第 1 代未完成。將從頭開始重新評估第 1 代。")
-                return 1, None, None, None, None
-
             print(f"🔁 偵測到未完成的第 {start_gen} 代，將從此代繼續。")
+
+            if start_gen == 1:
+                # Gen 1 是特例，沒有 'parent_old'
+                return 1, None, None, None, df
+
             parent_old_rows = df[df["role"] == "parent_old"]
             if len(parent_old_rows) < POP_SIZE:
                 print(
@@ -857,31 +863,85 @@ async def main_async(args):
     start_gen, pop_genes, pop_sigmas, parent_eval, incomplete_df = load_latest_state()
     executor = ThreadPoolExecutor(max_workers=MAX_WORKERS)
 
-    if pop_genes is None:
-        print(
-            f"🌱 無有效歷史紀錄，從第 1 代全新開始 (使用 {MAX_WORKERS} 個並行 workers)"
-        )
-        start_gen = 1
+    if start_gen == 1 and pop_genes is None:
+        gen = 1
+        print(f"\n{'='*18} GENERATION 1 (使用 {MAX_WORKERS} 個並行 workers) {'='*18}")
         pop_genes, pop_sigmas = init_population()
-        tasks = [
-            evaluate_individual_async(
-                executor, pop_genes[i], os.path.join(save_root, f"P{i+1}"), i + 1
-            )
-            for i in range(POP_SIZE)
-        ]
-        results = await asyncio.gather(*tasks)
-        initial_rows = [
-            create_log_row(
-                pop_genes[i], pop_sigmas[i], res[0], 1, "parent", (-1, -1), res[1]
-            )
-            for i, res in enumerate(results)
-        ]
-        parent_eval = [res[0] for res in results]
-        best = max(d[0] for d in parent_eval) if parent_eval else -9999
+        tasks = []
+        initial_rows = []
+        parent_eval = [None] * POP_SIZE
+
+        if incomplete_df is not None:
+            print(f"🌱 恢復未完成的第 1 代...")
+            completed_parents = incomplete_df[incomplete_df["role"] == "parent"].copy()
+            completed_parents["S1"] = completed_parents["S1"].apply(safe_float)
+            completed_parents["S2"] = completed_parents["S2"].apply(safe_float)
+            completed_parents["A1"] = completed_parents["A1"].apply(safe_float)
+
+            for i in range(POP_SIZE):
+                match = completed_parents[
+                    np.isclose(completed_parents["S1"], pop_genes[i, 0])
+                    & np.isclose(completed_parents["S2"], pop_genes[i, 1])
+                    & np.isclose(completed_parents["A1"], pop_genes[i, 2])
+                ]
+                if (
+                    not match.empty
+                    and safe_float(match.iloc[0].get("fitness"), -10000) > -9990
+                ):
+                    row = match.iloc[0]
+                    parent_eval[i] = (
+                        safe_float(row["fitness"]),
+                        safe_float(row["efficiency"]),
+                        safe_float(row["process_score"]),
+                        [safe_float(row.get(f"eff_{a}")) for a in range(10, 90, 10)],
+                        [],
+                    )
+                    initial_rows.append(row.to_dict())
+                else:
+                    tasks.append(
+                        evaluate_individual_async(
+                            executor,
+                            pop_genes[i],
+                            os.path.join(save_root, f"P{i+1}"),
+                            i + 1,
+                        )
+                    )
+        else:
+            print(f"🌱 全新開始第 1 代...")
+            tasks = [
+                evaluate_individual_async(
+                    executor, pop_genes[i], os.path.join(save_root, f"P{i+1}"), i + 1
+                )
+                for i in range(POP_SIZE)
+            ]
+
+        if tasks:
+            results = await asyncio.gather(*tasks)
+            res_idx = 0
+            for i in range(POP_SIZE):
+                if parent_eval[i] is None:
+                    eval_data, design_params = results[res_idx]
+                    parent_eval[i] = eval_data
+                    if not design_params.get("aborted"):
+                        initial_rows.append(
+                            create_log_row(
+                                pop_genes[i],
+                                pop_sigmas[i],
+                                eval_data,
+                                1,
+                                "parent",
+                                (-1, -1),
+                                design_params,
+                            )
+                        )
+                    res_idx += 1
+
+        best = max((d[0] for d in parent_eval if d[0] > -9990), default=-9999)
         fn = f"fitness_gen1_max{best:.2f}.csv"
         save_generation_log(initial_rows, os.path.join(log_dir, fn))
         print(f"★ 第 1 代完成，存為 {fn}")
         start_gen = 2
+        incomplete_df = None
 
     for gen in range(start_gen, N_GENERATIONS + 1):
         if graceful_stop_event.is_set() or immediate_stop_event.is_set():
@@ -892,6 +952,9 @@ async def main_async(args):
             f"\n{'='*18} GENERATION {gen} (使用 {MAX_WORKERS} 個並行 workers) {'='*18}"
         )
 
+        children_genes, children_sigmas, parent_pairs = make_offspring(
+            pop_genes, pop_sigmas
+        )
         tasks_to_run, indices_to_run = [], []
         offspring_eval = [None] * OFFSPRING_SIZE
         current_rows = []
@@ -901,25 +964,30 @@ async def main_async(args):
             offspring_rows = incomplete_df[
                 incomplete_df["role"] == "offspring"
             ].reset_index()
-            children_genes = offspring_rows[["S1", "S2", "A1"]].to_numpy(dtype=float)
-            children_sigmas = offspring_rows[["sigma1", "sigma2", "sigma3"]].to_numpy(
-                dtype=float
-            )
-            parent_pairs = list(
-                zip(
-                    offspring_rows["parent_idx1"].astype(int),
-                    offspring_rows["parent_idx2"].astype(int),
-                )
+            children_genes, children_sigmas, parent_pairs = make_offspring(
+                pop_genes, pop_sigmas
             )
 
-            for i in range(len(offspring_rows)):
-                row = offspring_rows.iloc[i]
-                fitness = safe_float(row.get("fitness"), -10000)
-                if fitness > -9990:
+            for i in range(OFFSPRING_SIZE):
+                match = offspring_rows[
+                    np.isclose(offspring_rows["S1"].astype(float), children_genes[i][0])
+                    & np.isclose(
+                        offspring_rows["S2"].astype(float), children_genes[i][1]
+                    )
+                    & np.isclose(
+                        offspring_rows["A1"].astype(float), children_genes[i][2]
+                    )
+                ]
+
+                if (
+                    not match.empty
+                    and safe_float(match.iloc[0].get("fitness"), -10000) > -9990
+                ):
+                    row = match.iloc[0]
                     offspring_eval[i] = (
-                        fitness,
-                        safe_float(row.get("efficiency")),
-                        safe_float(row.get("process_score")),
+                        safe_float(row["fitness"]),
+                        safe_float(row["efficiency"]),
+                        safe_float(row["process_score"]),
                         [safe_float(row.get(f"eff_{a}")) for a in range(10, 90, 10)],
                         [],
                     )
@@ -951,9 +1019,6 @@ async def main_async(args):
             except Exception as e:
                 print(f"⚠️ 讀歷史日誌失敗：{e}")
 
-            children_genes, children_sigmas, parent_pairs = make_offspring(
-                pop_genes, pop_sigmas
-            )
             for i, child in enumerate(children_genes):
                 dup, data = is_duplicate_history(history_rows, child)
                 if dup:
@@ -980,21 +1045,24 @@ async def main_async(args):
         if tasks_to_run:
             print(f"  -> 正在並行評估 {len(tasks_to_run)} 個新子代...")
             results = await asyncio.gather(*tasks_to_run)
-            for task_idx, (eval_data, design_params) in enumerate(results):
-                original_idx = indices_to_run[task_idx]
-                offspring_eval[original_idx] = eval_data
-                if not design_params.get("aborted"):
-                    current_rows.append(
-                        create_log_row(
-                            children_genes[original_idx],
-                            children_sigmas[original_idx],
-                            eval_data,
-                            gen,
-                            "offspring",
-                            parent_pairs[original_idx],
-                            design_params,
+            res_idx = 0
+            for i in range(OFFSPRING_SIZE):
+                if offspring_eval[i] is None:
+                    eval_data, design_params = results[res_idx]
+                    offspring_eval[i] = eval_data
+                    if not design_params.get("aborted"):
+                        current_rows.append(
+                            create_log_row(
+                                children_genes[i],
+                                children_sigmas[i],
+                                eval_data,
+                                gen,
+                                "offspring",
+                                parent_pairs[i],
+                                design_params,
+                            )
                         )
-                    )
+                    res_idx += 1
 
         if any(v is None for v in offspring_eval):
             raise RuntimeError(f"第 {gen} 代有子代未評估")
