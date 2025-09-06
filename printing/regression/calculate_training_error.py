@@ -27,7 +27,7 @@ from compensation_utils import (
     TARGETS,
     average_by_structure,
 )
-from main import build_models  # 借用模型建立函式
+from model_main import build_models  # 借用模型建立函式
 
 
 def calculate_in_sample_error(

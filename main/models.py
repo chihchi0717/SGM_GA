@@ -6,7 +6,7 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import HuberRegressor
 
-# === 特徵定義 ===
+# === 特徵定義 (保持不變) ===
 FEATURES = [
     "Design_s1(mm)",
     "Design_s2(mm)",
@@ -17,13 +17,14 @@ FEATURES = [
 ]
 
 
+# === 特徵增強函式 (保持不變) ===
 def augment_feats_for_lengths_custom_interactions(
     X_raw: np.ndarray,
     add_ratios: bool,
     add_sincos: bool,
     return_names: bool = False,
-    add_interactions: bool = False,
-    add_aa_interact: bool = False,
+    add_interactions: bool = True,
+    add_aa_interact: bool = True,
 ):
     """
     對長度模型的特徵進行增強，交互作用項被拆分為獨立開關。
@@ -57,6 +58,7 @@ def augment_feats_for_lengths_custom_interactions(
     a_features = {"a3": X_raw[:, 3], "a1": X_raw[:, 4], "a2": X_raw[:, 5]}
 
     if add_interactions:
+        # s*s and s*a interactions
         for s_i, s_j in combinations(s_features.keys(), 2):
             final_feats.append(s_features[s_i] * s_features[s_j])
             final_names.append(f"{s_i}*{s_j}")
@@ -66,6 +68,7 @@ def augment_feats_for_lengths_custom_interactions(
                 final_names.append(f"{s_key}*{a_key}")
 
     if add_aa_interact:
+        # a*a interactions
         for a_i, a_j in combinations(a_features.keys(), 2):
             final_feats.append(a_features[a_i] * a_features[a_j])
             final_names.append(f"{a_i}*{a_j}")
@@ -77,6 +80,7 @@ def augment_feats_for_lengths_custom_interactions(
     return X_aug
 
 
+# === 通用 ModelHuber 類別 (保持不變) ===
 class ModelHuber:
     """一個通用的 Huber 迴歸模型類別，封裝了特徵工程和縮放。"""
 
@@ -88,8 +92,8 @@ class ModelHuber:
         max_iter: int,
         add_ratios: bool = False,
         add_sincos: bool = False,
-        add_interactions: bool = False,
-        add_aa_interact: bool = False,
+        add_interactions: bool = True,
+        add_aa_interact: bool = True,
     ):
         self.scaler: Optional[StandardScaler] = None
         self.scale = scale
@@ -147,3 +151,48 @@ class ModelHuber:
         s = pd.Series(self.model.coef_, index=self.feature_names_, name="coefficient")
         s["_intercept"] = self.model.intercept_
         return s.to_frame()
+
+
+# ==============================================================================
+# === 【新增】與 model_main.py 同步的工廠函式 ===
+# ==============================================================================
+
+
+def create_length_model_from_main_defaults(**kwargs) -> ModelHuber:
+    """
+    建立一個 Huber 模型，其預設參數與 model_main.py 中的「長度模型」完全相同。
+    可透過 kwargs 覆蓋預設值。
+    """
+    defaults = {
+        "scale": True,  # from --scale-length, default=True
+        "alpha": 1e-3,  # from --len-huber-alpha, default=1e-31
+        "epsilon": 1.35,  # from --len-huber-eps, default=1.35
+        "max_iter": 2000,  # from --len-huber-max-iter, default=2000
+        "add_ratios": False,  # from --len-add-ratios, no default=True
+        "add_sincos": False,  # from --len-add-sincos, no default=True
+        "add_interactions": True,  # from --add-interactions, default=True
+        "add_aa_interact": True,  # from --add-len-aa-interact, default=True
+    }
+    # 使用 kwargs 中的值更新 defaults
+    defaults.update(kwargs)
+    return ModelHuber(**defaults)
+
+
+def create_angle_model_from_main_defaults(**kwargs) -> ModelHuber:
+    """
+    建立一個 Huber 模型，其預設參數與 model_main.py 中的「角度模型」完全相同。
+    可透過 kwargs 覆蓋預設值。
+    """
+    defaults = {
+        "scale": True,  # from --scale-angle, default=True
+        "alpha": 1e-2,  # from --angle-huber-alpha, default=1e-2
+        "epsilon": 10,  # from --angle-huber-eps, default=10
+        "max_iter": 2000,  # from --angle-huber-max-iter, default=2000
+        "add_ratios": False,  # from --add-ratios, no default=True
+        "add_sincos": False,  # from --add-angle-sincos, no default=True
+        "add_interactions": True,  # from --add-angle-interactions, default=True
+        "add_aa_interact": True,  # from --add-angle-aa-interact, default=True
+    }
+    # 使用 kwargs 中的值更新 defaults
+    defaults.update(kwargs)
+    return ModelHuber(**defaults)

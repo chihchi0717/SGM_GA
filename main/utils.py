@@ -30,6 +30,15 @@ def safe_float(value, default=0.0):
         return default
 
 
+def format_for_log(individual):
+    """將個體基因格式化為字典以供日誌記錄。"""
+    return {
+        "S1": f"{individual[0]:.2f}",
+        "S2": f"{individual[1]:.2f}",
+        "A1": f"{int(round(individual[2]))}",
+    }
+
+
 def setup_keyboard_hooks():
     """設定鍵盤快速鍵：'q' 立即停止, 'f' 完成當前世代後停止。"""
     print("\n*** 按下 'f' 鍵可完成當前世代後停止，按下 'q' 鍵可立即中止 ***\n")
@@ -51,12 +60,13 @@ def setup_keyboard_hooks():
     keyboard.add_hotkey("f", stop_gracefully)
 
 
-def save_model_report(models, output_path: str):
+def save_model_report(models, output_path):
+    """將多個模型的係數儲存到一個 Excel 檔案中"""
     try:
         with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
             for name, model in models.items():
                 df_coef = model.get_coefficients_df()
-                if not df_coef.empty:
+                if df_coef is not None and not df_coef.empty:
                     df_coef.to_excel(writer, sheet_name=name)
         print(f"✅ 模型報告已成功儲存至：{output_path}")
     except Exception as e:
@@ -107,45 +117,6 @@ def send_error(subject: str, body: str):
         print(f"⚠️ OneDrive 寫入失敗，錯誤日誌已寫入本地：{fallback}")
 
 
-def save_generation_log(rows, file_path):
-    if not rows:
-        return
-    fieldnames = (
-        [
-            "generation",
-            "role",
-            "parent_idx1",
-            "parent_idx2",
-            "S1",
-            "S2",
-            "A1",
-            "S3_calc",
-            "A2_calc",
-            "A3_calc",
-            "s1_pred",
-            "s2_pred",
-            "s3_pred",
-            "a1_pred",
-            "a3_pred",
-            "sigma1",
-            "sigma2",
-            "sigma3",
-            "fitness",
-            "efficiency",
-            "process_score",
-            "uniformity",
-            "is_valid",
-        ]
-        + [f"eff_{a}" for a in range(10, 90, 10)]
-        + [f"uni_{a}" for a in range(10, 90, 10)]
-        + ["random_seed"]
-    )
-    with open(file_path, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
-        w.writeheader()
-        w.writerows(rows)
-
-
 def create_log_row(
     individual,
     sigma,
@@ -156,18 +127,13 @@ def create_log_row(
     design_params=None,
     seed=None,
 ):
+    from evolution import calculate_dependent_variables  # 避免循環匯入
+
     if design_params is None:
-        from evolution import calculate_dependent_variables
-
         design_params = calculate_dependent_variables(individual)
-
     fit, eff, proc = fitness_data[0], fitness_data[1], fitness_data[2]
     angle_effs = fitness_data[3] if len(fitness_data) >= 4 else []
-
-    from evolution import format_for_log
-
     fmt = format_for_log(individual)
-
     row = {
         "generation": generation,
         "role": role,
@@ -208,6 +174,45 @@ def create_log_row(
         row[f"uni_{a}"] = f"{u:.6f}"
 
     return row
+
+
+def save_generation_log(rows, file_path):
+    if not rows:
+        return
+    fieldnames = (
+        [
+            "generation",
+            "role",
+            "parent_idx1",
+            "parent_idx2",
+            "S1",
+            "S2",
+            "A1",
+            "S3_calc",
+            "A2_calc",
+            "A3_calc",
+            "s1_pred",
+            "s2_pred",
+            "s3_pred",
+            "a1_pred",
+            "a3_pred",
+            "sigma1",
+            "sigma2",
+            "sigma3",
+            "fitness",
+            "efficiency",
+            "process_score",
+            "uniformity",
+            "is_valid",
+        ]
+        + [f"eff_{a}" for a in range(10, 90, 10)]
+        + [f"uni_{a}" for a in range(10, 90, 10)]
+        + ["random_seed"]
+    )
+    with open(file_path, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        w.writeheader()
+        w.writerows(rows)
 
 
 def is_duplicate_history(
@@ -303,7 +308,9 @@ def load_latest_state():
 
             parent_old_rows = df[df["role"] == "parent_old"]
             if len(parent_old_rows) < config.POP_SIZE:
-                print(f"⚠️ 第 {start_gen} 代日誌損毀，將從頭開始。")
+                print(
+                    f"⚠️ 第 {start_gen} 代日誌損毀 (找不到完整的 'parent_old' 資訊)，將從頭開始。"
+                )
                 return 1, None, None, None, None
 
             pop_genes = parent_old_rows[["S1", "S2", "A1"]].to_numpy(dtype=float)

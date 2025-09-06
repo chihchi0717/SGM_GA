@@ -13,6 +13,15 @@ ANGLE_BOUND = [30.0, 90.0]
 # === 並行處理設定 ===
 MAX_WORKERS = os.cpu_count() or 4
 
+# === 模型設定 ===
+MODEL_TYPE = "Huber"  # 可選: 'Huber', 'RF', 'OLS'
+
+# === 模型特徵設定 (預設值) ===
+ADD_RATIOS = False
+ADD_SINCOS = False
+ADD_INTERACTIONS = True  # s*s, s*a 交互作用
+ADD_AA_INTERACT = True  # a*a 交互作用
+
 # === 演算法內部常數 ===
 N_VARS = 3  # 變數數量 (s1, s2, a1)
 TAU_PRIME = 1 / np.sqrt(2 * N_VARS)
@@ -28,11 +37,18 @@ VAR_RANGES = np.array(
 SIGMA_MIN = VAR_RANGES * 0.01
 GLOBAL_SEED = 42
 
+# === 重複評估檢查 ===
+CHECK_DUPLICATES = True  # 是否檢查並跳過與歷史紀錄中相似的參數
+DUPLICATE_TOLERANCE = [0.001, 0.001, 0.05]  # 判斷重複的容許誤差 [s1, s2, a1]
+
 # === 路徑設定 ===
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.abspath(os.path.dirname(__file__)))
 SAVE_ROOT = os.path.join(BASE_DIR, "GA_population")
 LOG_DIR = r"C:\Users\cchih\OneDrive - NTHU\msi"
-TRAIN_DATA_PATH = r".\model_excel\analysis_results_0.6_0.9.xlsx"
+TRAIN_DATA_PATH = os.path.join(
+    BASE_DIR, "main", "model_excel", "analysis_results_0.6_0.9.xlsx"
+)
+
 
 # 確保目錄存在
 os.makedirs(SAVE_ROOT, exist_ok=True)
