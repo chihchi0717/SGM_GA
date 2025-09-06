@@ -124,7 +124,7 @@ def evaluate_fitness(
                     intensity_col1 = float(parts[1])
                     total_energy += intensity_col1
                     angle_intensities.append(intensity_col1)
-                    if polar_angle > 90:
+                    if polar_angle > 67.38:
                         upward_energy += intensity_col1
                         if return_uniformity:
                             upward_values.append(intensity_col1)
@@ -157,7 +157,7 @@ def evaluate_fitness(
         efficiency = 0
     else:
         # efficiency = weighted_efficiency_total / weight_sum
-        efficiency = weighted_efficiency_total 
+        efficiency = weighted_efficiency_total
 
     try:
         emd = compute_regression_score(S1, S2, A1)
@@ -171,8 +171,8 @@ def evaluate_fitness(
     else:
         uniformity = 0.0
 
-    process_score = 1 / (1+emd) 
-    fitness = (eff_weight * efficiency )
+    process_score = 1 / (1 + emd)
+    fitness = eff_weight * efficiency
 
     if return_uniformity:
         return (
