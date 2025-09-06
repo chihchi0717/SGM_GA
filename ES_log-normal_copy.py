@@ -6,11 +6,14 @@ import time
 import math
 import shutil
 import random
-import argparse  # 匯入 argparse 模組
+import asyncio
+import argparse
 import traceback
+import threading
 from datetime import datetime
 from typing import Optional, Dict, Tuple, List
 from itertools import combinations
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pandas as pd
@@ -18,16 +21,21 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import HuberRegressor
 
 # === 你的外部模組（可用假模組） ===
-from draw_New import draw_
+# from draw_New import draw_ # 假設此模組存在
 from PYtoAutocad import Build_model
 from TracePro_fast import tracepro_fast
 from txt_ES import evaluate_fitness
 
-# pywinauto 不是必需；若無則忽略
+# pywinauto 和 keyboard 不是必需；若無則忽略
 try:
     from pywinauto import application, findwindows
 except Exception:
     pass
+
+try:
+    import keyboard
+except ImportError:
+    keyboard = None
 
 # ==============================================================================
 # === *** 核心模型定義 (整合自 compensation_models.py) *** ===
@@ -193,12 +201,27 @@ model_s3: Optional[ModelHuber] = None
 model_ang: Optional[ModelHuber] = None
 
 
+# === 全域開關 ===
+USE_COMPENSATION_MODEL = True
+immediate_stop_event = threading.Event()
+graceful_stop_event = threading.Event()
+
+
 # === ES 參數 ===
 POP_SIZE = 10
-OFFSPRING_SIZE = POP_SIZE * 7
+OFFSPRING_PARENT_RATIO = 10
+OFFSPRING_SIZE = POP_SIZE * OFFSPRING_PARENT_RATIO
+INITIAL_SIGMA_FACTOR = 0.15
 N_GENERATIONS = 100
 SIDE_BOUND = [0.6, 0.9]
 ANGLE_BOUND = [30.0, 90.0]
+
+# === 並行處理設定 ===
+MAX_WORKERS = os.cpu_count() or 4
+autocad_lock = threading.Lock()
+tracepro_lock = threading.Lock()
+
+
 n = 3
 TAU_PRIME = 1 / np.sqrt(2 * n)
 TAU = 1 / np.sqrt(2 * np.sqrt(n))
@@ -224,8 +247,38 @@ os.makedirs(log_dir, exist_ok=True)
 # ---------- 工具函式 ----------
 
 
+def safe_float(value, default=0.0):
+    """安全地將值轉換為浮點數，如果轉換失敗則回傳預設值。"""
+    if value is None or value == "":
+        return default
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
+
+def setup_keyboard_hooks():
+    """設定鍵盤快速鍵：'q' 立即停止, 'f' 完成當前世代後停止。"""
+    print("\n*** 按下 'f' 鍵可完成當前世代後停止，按下 'q' 鍵可立即中止 ***\n")
+
+    def stop_immediately():
+        if not immediate_stop_event.is_set():
+            print("\n*** 收到 'q' 立即停止訊號！將盡快中止目前所有任務... ***")
+            immediate_stop_event.set()
+            graceful_stop_event.set()
+
+    def stop_gracefully():
+        if not graceful_stop_event.is_set():
+            print(
+                "\n*** 收到 'f' 停止訊號！將在目前這一代 (Generation) 完成後停止... ***"
+            )
+            graceful_stop_event.set()
+
+    keyboard.add_hotkey("q", stop_immediately)
+    keyboard.add_hotkey("f", stop_gracefully)
+
+
 def save_model_report(models: Dict[str, ModelHuber], output_path: str):
-    """將多個模型的係數儲存到一個 Excel 檔案中"""
     try:
         with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
             for name, model in models.items():
@@ -239,9 +292,13 @@ def save_model_report(models: Dict[str, ModelHuber], output_path: str):
 
 def write_run_config():
     cfg = {
+        "USE_COMPENSATION_MODEL": USE_COMPENSATION_MODEL,
         "POP_SIZE": POP_SIZE,
         "OFFSPRING_SIZE": OFFSPRING_SIZE,
+        "OFFSPRING_PARENT_RATIO": OFFSPRING_PARENT_RATIO,
+        "INITIAL_SIGMA_FACTOR": INITIAL_SIGMA_FACTOR,
         "N_GENERATIONS": N_GENERATIONS,
+        "MAX_WORKERS": MAX_WORKERS,
         "SIDE_BOUND": SIDE_BOUND,
         "ANGLE_BOUND": ANGLE_BOUND,
         "TAU_PRIME": TAU_PRIME,
@@ -278,12 +335,8 @@ def send_error(subject: str, body: str):
 
 
 def predict_shrinkage_and_angle(design_params: Dict) -> Tuple[float, float, float]:
-    """
-    使用全域的模型物件進行預測，此方法會自動處理特徵工程和縮放。
-    """
     if model_s2 is None or model_s3 is None or model_ang is None:
         raise RuntimeError("模型尚未初始化。")
-
     df_input = pd.DataFrame([design_params])
     df_features = df_input.rename(
         columns={
@@ -295,11 +348,9 @@ def predict_shrinkage_and_angle(design_params: Dict) -> Tuple[float, float, floa
             "a3": "Design_a3(deg)",
         }
     )[FEATURES]
-
     pred_s2 = model_s2.predict(df_features)[0]
     pred_s3 = model_s3.predict(df_features)[0]
     pred_a3 = model_ang.predict(df_features)[0]
-
     return pred_s2, pred_s3, pred_a3
 
 
@@ -307,26 +358,17 @@ def calculate_final_geometry_from_predictions(s2_pred, s3_pred, a3_pred_deg):
     a3_pred_rad = math.radians(a3_pred_deg)
     s3_sin_a3 = s3_pred * math.sin(a3_pred_rad)
     s3_cos_a3 = s3_pred * math.cos(a3_pred_rad)
-
     denominator = s2_pred - s3_cos_a3
     if abs(denominator) < 1e-9:
-        print("️⚠️ 幾何無解，tan(a1) 計算分母為零。")
         return None, None
-
     a1_pred_rad = math.atan2(s3_sin_a3, denominator)
     a1_pred_deg = math.degrees(a1_pred_rad)
-
     if a1_pred_deg <= 0 or a1_pred_deg >= 180:
-        print(f"️⚠️ 幾何無解，計算出的 a1_pred ({a1_pred_deg:.2f}) 超出範圍。")
         return None, None
-
     sin_a1 = math.sin(a1_pred_rad)
     if abs(sin_a1) < 1e-9:
-        print("️⚠️ 幾何無解，sin(a1) 為零。")
         return None, None
-
     s1_pred = s3_pred * math.sin(a3_pred_rad) / sin_a1
-
     return s1_pred, a1_pred_deg
 
 
@@ -334,12 +376,11 @@ def calculate_dependent_variables(individual):
     s1, s2, a1_deg = individual[0], individual[1], individual[2]
     a1_rad = math.radians(a1_deg)
     s3 = math.sqrt(pow(s1, 2) + pow(s2, 2) - 2 * s1 * s2 * math.cos(a1_rad))
-
     if abs(s1) < 1e-9 or abs(s3) < 1e-9:
         return {"s1": s1, "s2": s2, "s3": s3, "a1": a1_deg, "is_valid": False}
-
-    cos_a2_arg = (pow(s1, 2) + pow(s3, 2) - pow(s2, 2)) / (2 * s1 * s3)
-    cos_a2_arg = max(-1.0, min(1.0, cos_a2_arg))
+    cos_a2_arg = max(
+        -1.0, min(1.0, (pow(s1, 2) + pow(s3, 2) - pow(s2, 2)) / (2 * s1 * s3))
+    )
     a2_rad = math.acos(cos_a2_arg)
     a2_deg = math.degrees(a2_rad)
     a3_deg = 180.0 - a1_deg - a2_deg
@@ -352,47 +393,66 @@ def calculate_dependent_variables(individual):
         "a3": a3_deg,
     }
 
-    s2_shrink_rate, s3_shrink_rate, a3_pred = predict_shrinkage_and_angle(design_params)
-    s2_pred = s2 * (1 - s2_shrink_rate)
-    s3_pred = s3 * (1 - s3_shrink_rate)
-
-    if s2_pred <= 0 or s3_pred <= 0:
-        print(
-            f"️⚠️ 物理無解：預測長度為負或零 (s2_pred: {s2_pred:.2f}, s3_pred: {s3_pred:.2f})。"
-        )
+    if USE_COMPENSATION_MODEL:
+        s2_shrink, s3_shrink, a3_pred = predict_shrinkage_and_angle(design_params)
+        s2_pred = s2 * (1 - s2_shrink)
+        s3_pred = s3 * (1 - s3_shrink)
+        if s2_pred <= 0 or s3_pred <= 0:
+            design_params.update(
+                {
+                    "is_valid": False,
+                    "s2_predicted": s2_pred,
+                    "s3_predicted": s3_pred,
+                    "a3_predicted": a3_pred,
+                }
+            )
+            return design_params
         design_params.update(
-            {
-                "is_valid": False,
-                "s2_predicted": s2_pred,
-                "s3_predicted": s3_pred,
-                "a3_predicted": a3_pred,
-            }
+            {"s2_predicted": s2_pred, "s3_predicted": s3_pred, "a3_predicted": a3_pred}
         )
-        return design_params
-
-    design_params.update(
-        {"s2_predicted": s2_pred, "s3_predicted": s3_pred, "a3_predicted": a3_pred}
-    )
-    s1_pred, a1_pred = calculate_final_geometry_from_predictions(
-        s2_pred, s3_pred, a3_pred
-    )
-
-    if s1_pred is None:
-        design_params["is_valid"] = False
+        s1_pred, a1_pred = calculate_final_geometry_from_predictions(
+            s2_pred, s3_pred, a3_pred
+        )
+        if s1_pred is None:
+            design_params["is_valid"] = False
+        else:
+            design_params.update(
+                {"is_valid": True, "s1_predicted": s1_pred, "a1_predicted": a1_pred}
+            )
     else:
         design_params.update(
-            {"is_valid": True, "s1_predicted": s1_pred, "a1_predicted": a1_pred}
+            {
+                "is_valid": True,
+                "s1_predicted": s1,
+                "s2_predicted": s2,
+                "s3_predicted": s3,
+                "a1_predicted": a1_deg,
+                "a3_predicted": a3_deg,
+            }
         )
     return design_params
 
 
-def evaluate_individual(individual: np.ndarray, folder: str) -> Tuple[Tuple, Dict]:
-    penalty_fitness = (-9999.0, 0, 0, [], [])
+def evaluate_individual(
+    individual: np.ndarray, folder: str, idx: int
+) -> Tuple[Tuple, Dict]:
+    aborted_fitness = (-9998.0, 0, 0, [], [])
+    aborted_params = {"is_valid": False, "aborted": True}
 
+    if immediate_stop_event.is_set():
+        print(f"  [Worker {idx}] 偵測到立即停止訊號，中止評估。")
+        return aborted_fitness, aborted_params
+
+    penalty_fitness = (-9999.0, 0, 0, [], [])
+    print(f"  [Worker {idx}] 開始評估個體...")
     design_params = calculate_dependent_variables(individual)
 
+    if immediate_stop_event.is_set():
+        print(f"  [Worker {idx}] 偵測到立即停止訊號，中止評估。")
+        return aborted_fitness, design_params
+
     if not design_params.get("is_valid", False):
-        print(f"  -> 幾何/物理無解，指定懲罰 fitness。")
+        print(f"  [Worker {idx}] -> 幾何/物理無解，指定懲罰 fitness。")
         return penalty_fitness, design_params
 
     params_for_build = [
@@ -402,33 +462,70 @@ def evaluate_individual(individual: np.ndarray, folder: str) -> Tuple[Tuple, Dic
     ]
 
     build_success = False
-    for attempt in range(3):
-        try:
-            result, logs = Build_model(
-                params_for_build,
-                mode="triangle",
-                folder=folder,
-                fillet=2,
-                radius_vertex=0.036,
-                radius_inside=0.053,
-                light_source_length=1,
-            )
-            for msg in logs:
-                print(msg)
-            if result == 1:
-                build_success = True
+    with autocad_lock:
+        if immediate_stop_event.is_set():
+            print(f"  [Worker {idx}] 偵測到立即停止訊號，跳過建模。")
+            return aborted_fitness, design_params
+
+        print(f"  [Worker {idx}] 取得 AutoCAD 鎖，開始建模...")
+        for attempt in range(3):
+            if immediate_stop_event.is_set():
+                print(f"  [Worker {idx}] 偵測到立即停止訊號，取消建模嘗試。")
                 break
-        except Exception as e:
-            print(f"❌ Build_model 第 {attempt+1} 次失敗：{e}")
-            time.sleep(1)
+            try:
+                result, _ = Build_model(
+                    params_for_build,
+                    mode="triangle",
+                    folder=folder,
+                    fillet=2,
+                    radius_vertex=0.036,
+                    radius_inside=0.053,
+                    light_source_length=1,
+                )
+                if result == 1:
+                    build_success = True
+                    break
+            except Exception as e:
+                print(f"❌ [Worker {idx}] Build_model 第 {attempt+1} 次失敗：{e}")
+                time.sleep(1)
+        print(f"  [Worker {idx}] 釋放 AutoCAD 鎖。")
 
     if not build_success:
-        print(f"  -> 建模失敗，指定懲罰 fitness。")
+        if immediate_stop_event.is_set():
+            return aborted_fitness, design_params
+        print(f"  [Worker {idx}] -> 建模失敗，指定懲罰 fitness。")
         return penalty_fitness, design_params
 
-    print(f"  -> 模型建立成功，進行光學模擬/評估...")
+    if immediate_stop_event.is_set():
+        print(f"  [Worker {idx}] 偵測到立即停止訊號，跳過模擬。")
+        return aborted_fitness, design_params
+
+    simulation_success = False
+    with tracepro_lock:
+        if immediate_stop_event.is_set():
+            print(f"  [Worker {idx}] 偵測到立即停止訊號，跳過模擬。")
+            return aborted_fitness, design_params
+
+        print(f"  [Worker {idx}] 取得 TracePro 鎖，開始光學模擬...")
+        try:
+            tracepro_fast(os.path.join(folder, "Sim.scm"))
+            simulation_success = True
+        except Exception as e:
+            print(f"⚠️ [Worker {idx}] tracepro_fast 失敗：{e}")
+        print(f"  [Worker {idx}] 釋放 TracePro 鎖。")
+
+    if not simulation_success:
+        if immediate_stop_event.is_set():
+            return aborted_fitness, design_params
+        print(f"  [Worker {idx}] -> 光學模擬失敗，指定懲罰 fitness。")
+        return penalty_fitness, design_params
+
+    if immediate_stop_event.is_set():
+        print(f"  [Worker {idx}] 偵測到立即停止訊號，跳過 fitness 計算。")
+        return aborted_fitness, design_params
+
     try:
-        tracepro_fast(os.path.join(folder, "Sim.scm"))
+        print(f"  [Worker {idx}] -> 開始計算 fitness...")
         fitness_data = evaluate_fitness(
             folder,
             individual,
@@ -437,10 +534,18 @@ def evaluate_individual(individual: np.ndarray, folder: str) -> Tuple[Tuple, Dic
             process_weight=1,
             uni_weight=1,
         )
+        print(f"  [Worker {idx}] -> 評估完成。")
         return fitness_data, design_params
     except Exception as e:
-        print(f"⚠️ tracepro/evaluate_fitness 失敗，重試：{e}")
+        print(f"⚠️ [Worker {idx}] evaluate_fitness 失敗：{e}")
         return penalty_fitness, design_params
+
+
+async def evaluate_individual_async(executor, individual, folder, idx):
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        executor, evaluate_individual, individual, folder, idx
+    )
 
 
 def reflect_bounds(x):
@@ -518,12 +623,8 @@ def create_log_row(
 ):
     if design_params is None:
         design_params = calculate_dependent_variables(individual)
-
     fit, eff, proc = fitness_data[0], fitness_data[1], fitness_data[2]
-    uni = 0.0  # return_uniformity=False
     angle_effs = fitness_data[3] if len(fitness_data) >= 4 else []
-    angle_unis = fitness_data[4] if len(fitness_data) >= 5 else []
-
     fmt = format_for_log(individual)
     row = {
         "generation": generation,
@@ -547,29 +648,24 @@ def create_log_row(
         "fitness": f"{fit:.6f}",
         "efficiency": f"{eff:.6f}",
         "process_score": f"{proc:.6f}",
-        "uniformity": f"{uni:.6f}",
+        "uniformity": f"{0.0:.6f}",
         "is_valid": design_params.get("is_valid", False),
         "random_seed": seed if seed is not None else GLOBAL_SEED,
     }
-    for a, e in zip(range(10, 90, 10), angle_effs):
+
+    all_angles = range(10, 90, 10)
+    for a in all_angles:
+        row[f"eff_{a}"] = "0.000000"
+        row[f"uni_{a}"] = "0.000000"
+
+    for a, e in zip(all_angles, angle_effs):
         row[f"eff_{a}"] = f"{e:.6f}"
-    for a, u in zip(range(10, 90, 10), angle_unis):
+
+    angle_unis = fitness_data[4] if len(fitness_data) >= 5 else []
+    for a, u in zip(all_angles, angle_unis):
         row[f"uni_{a}"] = f"{u:.6f}"
+
     return row
-
-
-def find_last_completed_generation(directory):
-    if not os.path.exists(directory):
-        return 0, None
-    pat = re.compile(r"fitness_gen(\d+)_max.*\.csv")
-    last_gen, last_path = 0, None
-    for fn in os.listdir(directory):
-        m = pat.match(fn)
-        if m:
-            g = int(m.group(1))
-            if g > last_gen:
-                last_gen, last_path = g, os.path.join(directory, fn)
-    return last_gen, last_path
 
 
 def is_duplicate_history(
@@ -579,24 +675,17 @@ def is_duplicate_history(
     for row in reversed(full_history_rows):
         try:
             y = np.array(
-                [
-                    float(row.get("S1", "nan")),
-                    float(row.get("S2", "nan")),
-                    float(row.get("A1", "nan")),
-                ],
-                dtype=float,
+                [float(row.get(k, "nan")) for k in ["S1", "S2", "A1"]], dtype=float
             )
         except Exception:
             continue
         if np.all(np.abs(x - y) <= tol):
-            fitness = float(row.get("fitness") or 0.0)
-            efficiency = float(row.get("efficiency") or 0.0)
-            process_score = float(row.get("process_score") or 0.0)
-            uniformity = float(row.get("uniformity") or 0.0)
-            angle_effs = [float(row.get(f"eff_{a}") or 0.0) for a in range(10, 90, 10)]
-            angle_unis = [float(row.get(f"uni_{a}") or 0.0) for a in range(10, 90, 10)]
-
-            return True, (fitness, efficiency, process_score, angle_effs, angle_unis)
+            fit = (
+                float(row.get(k) or 0.0)
+                for k in ["fitness", "efficiency", "process_score"]
+            )
+            effs = [float(row.get(f"eff_{a}") or 0.0) for a in range(10, 90, 10)]
+            return True, (*fit, effs, [])
     return False, None
 
 
@@ -617,7 +706,7 @@ def init_population():
     pop[:, 2] = np.random.uniform(ANGLE_BOUND[0], ANGLE_BOUND[1], size=POP_SIZE)
     for i in range(POP_SIZE):
         pop[i] = reflect_bounds(pop[i])
-    sigma0 = np.tile((VAR_RANGES * 0.10), (POP_SIZE, 1))
+    sigma0 = np.tile((VAR_RANGES * INITIAL_SIGMA_FACTOR), (POP_SIZE, 1))
     return pop, sigma0
 
 
@@ -628,8 +717,8 @@ def make_offspring(pop_genes, pop_sigmas):
         x1, x2, s1, s2 = pop_genes[p1], pop_genes[p2], pop_sigmas[p1], pop_sigmas[p2]
         alpha = np.random.rand()
         x_bar, s_bar = alpha * x1 + (1 - alpha) * x2, alpha * s1 + (1 - alpha) * s2
-        global_noise, indiv_noise = np.random.randn(), np.random.randn(n)
-        new_sigma = s_bar * np.exp(TAU_PRIME * global_noise + TAU * indiv_noise)
+        noise = np.random.randn()
+        new_sigma = s_bar * np.exp(TAU_PRIME * noise + TAU * np.random.randn(n))
         new_sigma = np.maximum(new_sigma, SIGMA_MIN)
         child = reflect_bounds(x_bar + new_sigma * np.random.randn(n))
         children_genes.append(child)
@@ -638,12 +727,97 @@ def make_offspring(pop_genes, pop_sigmas):
     return children_genes, children_sigmas, parent_pairs
 
 
-def main(args):
-    global model_s2, model_s3, model_ang
+def load_latest_state():
+    """檢查最新日誌檔以決定啟動模式（全新、接續、或從中斷點恢復）。"""
+    if not os.path.exists(log_dir):
+        return 1, None, None, None, None
+
+    log_files = [
+        f
+        for f in os.listdir(log_dir)
+        if f.startswith("fitness_gen") and f.endswith(".csv")
+    ]
+    if not log_files:
+        return 1, None, None, None, None
+
+    latest_gen_num = -1
+    last_path = ""
+    for fn in log_files:
+        m = re.search(r"fitness_gen(\d+)", fn)
+        if m:
+            gen_num = int(m.group(1))
+            if gen_num > latest_gen_num:
+                latest_gen_num = gen_num
+                last_path = os.path.join(log_dir, fn)
+
+    if latest_gen_num == -1:
+        return 1, None, None, None, None
+
+    try:
+        df = pd.read_csv(last_path)
+        parent_rows = df[df["role"] == "parent"]
+
+        if len(parent_rows) >= POP_SIZE:
+            start_gen = latest_gen_num + 1
+            print(
+                f"🔁 偵測到已完成的第 {latest_gen_num} 代，將從第 {start_gen} 代開始。"
+            )
+            pop_genes = parent_rows[["S1", "S2", "A1"]].to_numpy(dtype=float)
+            pop_sigmas = parent_rows[["sigma1", "sigma2", "sigma3"]].to_numpy(
+                dtype=float
+            )
+            parent_eval = [
+                (
+                    safe_float(r["fitness"]),
+                    safe_float(r["efficiency"]),
+                    safe_float(r["process_score"]),
+                    [safe_float(r.get(f"eff_{a}")) for a in range(10, 90, 10)],
+                    [],
+                )
+                for _, r in parent_rows.iterrows()
+            ]
+            return start_gen, pop_genes, pop_sigmas, parent_eval, None
+        else:
+            start_gen = latest_gen_num
+            # FIX: Special handling for incomplete Generation 1
+            if start_gen == 1:
+                print(f"⚠️ 偵測到第 1 代未完成。將從頭開始重新評估第 1 代。")
+                return 1, None, None, None, None
+
+            print(f"🔁 偵測到未完成的第 {start_gen} 代，將從此代繼續。")
+            parent_old_rows = df[df["role"] == "parent_old"]
+            if len(parent_old_rows) < POP_SIZE:
+                print(
+                    f"⚠️ 第 {start_gen} 代日誌損毀 (找不到完整的 'parent_old' 資訊)，將從頭開始。"
+                )
+                return 1, None, None, None, None
+
+            pop_genes = parent_old_rows[["S1", "S2", "A1"]].to_numpy(dtype=float)
+            pop_sigmas = parent_old_rows[["sigma1", "sigma2", "sigma3"]].to_numpy(
+                dtype=float
+            )
+            parent_eval = [
+                (
+                    safe_float(r["fitness"]),
+                    safe_float(r["efficiency"]),
+                    safe_float(r["process_score"]),
+                    [safe_float(r.get(f"eff_{a}")) for a in range(10, 90, 10)],
+                    [],
+                )
+                for _, r in parent_old_rows.iterrows()
+            ]
+            return start_gen, pop_genes, pop_sigmas, parent_eval, df
+    except Exception as e:
+        print(f"⚠️ 讀取日誌檔 '{last_path}' 失敗: {e}。將從頭開始。")
+        return 1, None, None, None, None
+
+
+async def main_async(args):
+    global USE_COMPENSATION_MODEL, model_s2, model_s3, model_ang
+    USE_COMPENSATION_MODEL = not args.no_compensation
+    print(f"收縮補償模型: {'🟢 啟用' if USE_COMPENSATION_MODEL else '🔴 禁用'}")
 
     print("\n--- 初始化並訓練補償模型 ---")
-
-    # 根據命令列參數設定模型
     model_kwargs = {
         "scale": True,
         "alpha": 1.0,
@@ -654,162 +828,176 @@ def main(args):
         "add_interactions": args.add_interactions,
         "add_aa_interact": args.add_aa_interact,
     }
-
     model_s2 = ModelHuber(**model_kwargs)
     model_s3 = ModelHuber(**model_kwargs)
-    model_ang_kwargs = model_kwargs.copy()
-    model_ang_kwargs["alpha"] = 0.1
-    model_ang = ModelHuber(**model_ang_kwargs)
-
+    model_ang = ModelHuber(**{**model_kwargs, "alpha": 0.1})
     try:
         df_train = pd.read_excel(TRAIN_DATA_PATH)
         print(f"✅ 成功讀取訓練資料 '{TRAIN_DATA_PATH}'。")
-
-        print("🏋️ 正在訓練 delta_s2 模型...")
-        model_s2.fit(df_train, target="delta_s2")
-
-        print("🏋️ 正在訓練 delta_s3 模型...")
-        model_s3.fit(df_train, target="delta_s3")
-
-        print("🏋️ 正在訓練 DIP_a3(deg) 模型...")
-        model_ang.fit(df_train, target="DIP_a3(deg)")
-
+        model_s2.fit(df_train, "delta_s2")
+        model_s3.fit(df_train, "delta_s3")
+        model_ang.fit(df_train, "DIP_a3(deg)")
         print("✅ 所有模型訓練完成。")
-    except FileNotFoundError:
-        print(f"❌ 嚴重錯誤: 找不到訓練資料 '{TRAIN_DATA_PATH}'。無法訓練模型。")
-        return
     except Exception as e:
-        print(f"❌ 讀取或訓練時發生錯誤: {e}")
+        print(f"❌ 模型訓練失敗: {e}")
         return
-
-    # 如果指定了 --save-report，則儲存報告
     if args.save_report:
-        all_models = {
-            "model_s2": model_s2,
-            "model_s3": model_s3,
-            "model_ang": model_ang,
-        }
-        save_model_report(all_models, args.save_report)
-        # 如果使用者只想存報告而不執行後續優化，可以在此結束
+        save_model_report(
+            {"model_s2": model_s2, "model_s3": model_s3, "model_ang": model_ang},
+            args.save_report,
+        )
         if args.report_only:
             print("報告已儲存，程式結束。")
             return
 
     print("---------------------------\n")
-
     copy_scm_to_all_folders()
     write_run_config()
-    start_gen, last_path = find_last_completed_generation(log_dir)
-    parent_eval = []
 
-    if start_gen == 0:
-        print("🌱 無日誌，從第 1 代開始")
+    start_gen, pop_genes, pop_sigmas, parent_eval, incomplete_df = load_latest_state()
+    executor = ThreadPoolExecutor(max_workers=MAX_WORKERS)
+
+    if pop_genes is None:
+        print(
+            f"🌱 無有效歷史紀錄，從第 1 代全新開始 (使用 {MAX_WORKERS} 個並行 workers)"
+        )
+        start_gen = 1
         pop_genes, pop_sigmas = init_population()
-        initial_rows = []
-        for i in range(POP_SIZE):
-            folder = os.path.join(save_root, f"P{i+1}")
-            print(f"  處理初始個體 P{i+1}...")
-            eval_data, design_params = evaluate_individual(pop_genes[i], folder)
-            parent_eval.append(eval_data)
-            initial_rows.append(
-                create_log_row(
-                    pop_genes[i],
-                    pop_sigmas[i],
-                    eval_data,
-                    1,
-                    "parent",
-                    (-1, -1),
-                    design_params=design_params,
-                )
+        tasks = [
+            evaluate_individual_async(
+                executor, pop_genes[i], os.path.join(save_root, f"P{i+1}"), i + 1
             )
-
-        best = max(d[0] for d in parent_eval)
+            for i in range(POP_SIZE)
+        ]
+        results = await asyncio.gather(*tasks)
+        initial_rows = [
+            create_log_row(
+                pop_genes[i], pop_sigmas[i], res[0], 1, "parent", (-1, -1), res[1]
+            )
+            for i, res in enumerate(results)
+        ]
+        parent_eval = [res[0] for res in results]
+        best = max(d[0] for d in parent_eval) if parent_eval else -9999
         fn = f"fitness_gen1_max{best:.2f}.csv"
         save_generation_log(initial_rows, os.path.join(log_dir, fn))
         print(f"★ 第 1 代完成，存為 {fn}")
-        start_gen = 1
-    else:
+        start_gen = 2
+
+    for gen in range(start_gen, N_GENERATIONS + 1):
+        if graceful_stop_event.is_set() or immediate_stop_event.is_set():
+            print(f"在第 {gen} 代開始前偵測到停止訊號，準備結束程式。")
+            break
+
         print(
-            f"🔁 從 {os.path.basename(last_path)} 恢復，將續跑至第 {N_GENERATIONS} 代"
+            f"\n{'='*18} GENERATION {gen} (使用 {MAX_WORKERS} 個並行 workers) {'='*18}"
         )
-        with open(last_path, "r", encoding="utf-8") as f:
-            rows = [r for r in csv.DictReader(f) if r.get("role") == "parent"]
-        pop_genes = np.array(
-            [[float(r["S1"]), float(r["S2"]), float(r["A1"])] for r in rows]
-        )
-        pop_sigmas = np.array(
-            [[float(r["sigma1"]), float(r["sigma2"]), float(r["sigma3"])] for r in rows]
-        )
-        parent_eval_from_log = []
-        for r in rows:
-            fit = float(r.get("fitness") or 0.0)
-            eff = float(r.get("efficiency") or 0.0)
-            proc = float(r.get("process_score") or 0.0)
-            angle_effs = [float(r.get(f"eff_{a}") or 0.0) for a in range(10, 90, 10)]
-            angle_unis = [float(r.get(f"uni_{a}") or 0.0) for a in range(10, 90, 10)]
-            parent_eval_from_log.append((fit, eff, proc, angle_effs, angle_unis))
-        parent_eval = parent_eval_from_log
 
-    for g in range(start_gen, N_GENERATIONS):
-        gen = g + 1
-        print(f"\n{'='*18} GENERATION {gen} {'='*18}")
-        history_rows = []
-        try:
-            files = sorted(
-                [
-                    f
-                    for f in os.listdir(log_dir)
-                    if f.startswith("fitness_gen") and f.endswith(".csv")
-                ],
-                key=lambda x: int(re.search(r"gen(\d+)", x).group(1)),
+        tasks_to_run, indices_to_run = [], []
+        offspring_eval = [None] * OFFSPRING_SIZE
+        current_rows = []
+
+        if incomplete_df is not None and gen == incomplete_df["generation"].iloc[0]:
+            print(f"  -> 恢復第 {gen} 代的未完成工作...")
+            offspring_rows = incomplete_df[
+                incomplete_df["role"] == "offspring"
+            ].reset_index()
+            children_genes = offspring_rows[["S1", "S2", "A1"]].to_numpy(dtype=float)
+            children_sigmas = offspring_rows[["sigma1", "sigma2", "sigma3"]].to_numpy(
+                dtype=float
             )
-            for f in files:
-                with open(os.path.join(log_dir, f), "r", encoding="utf-8") as fh:
-                    history_rows.extend(list(csv.DictReader(fh)))
-        except Exception as e:
-            print(f"⚠️ 讀歷史日誌失敗：{e}")
+            parent_pairs = list(
+                zip(
+                    offspring_rows["parent_idx1"].astype(int),
+                    offspring_rows["parent_idx2"].astype(int),
+                )
+            )
 
-        children_genes, children_sigmas, parent_pairs = make_offspring(
-            pop_genes, pop_sigmas
-        )
-        offspring_eval, current_rows, need_eval = [None] * OFFSPRING_SIZE, [], []
-
-        for i, child in enumerate(children_genes):
-            dup, data = is_duplicate_history(history_rows, child)
-            if dup:
-                offspring_eval[i] = data
-                current_rows.append(
-                    create_log_row(
-                        child,
-                        children_sigmas[i],
-                        data,
-                        gen,
-                        "offspring",
-                        parent_pairs[i],
+            for i in range(len(offspring_rows)):
+                row = offspring_rows.iloc[i]
+                fitness = safe_float(row.get("fitness"), -10000)
+                if fitness > -9990:
+                    offspring_eval[i] = (
+                        fitness,
+                        safe_float(row.get("efficiency")),
+                        safe_float(row.get("process_score")),
+                        [safe_float(row.get(f"eff_{a}")) for a in range(10, 90, 10)],
+                        [],
                     )
+                    current_rows.append(row.to_dict())
+                else:
+                    folder = os.path.join(save_root, f"P{POP_SIZE + i + 1}")
+                    tasks_to_run.append(
+                        evaluate_individual_async(
+                            executor, children_genes[i], folder, POP_SIZE + i + 1
+                        )
+                    )
+                    indices_to_run.append(i)
+            incomplete_df = None
+        else:
+            history_rows = []
+            try:
+                files = sorted(
+                    [f for f in os.listdir(log_dir) if f.startswith("fitness_gen")],
+                    key=lambda x: int(re.search(r"gen(\d+)", x).group(1)),
                 )
-            else:
-                need_eval.append(i)
+                for f in files:
+                    history_rows.extend(
+                        list(
+                            csv.DictReader(
+                                open(os.path.join(log_dir, f), "r", encoding="utf-8")
+                            )
+                        )
+                    )
+            except Exception as e:
+                print(f"⚠️ 讀歷史日誌失敗：{e}")
 
-        for i in need_eval:
-            folder = os.path.join(save_root, f"P{POP_SIZE + i + 1}")
-            print(f"  處理子代個體 P{POP_SIZE + i + 1}...")
-            eval_data, design_params = evaluate_individual(children_genes[i], folder)
-            offspring_eval[i] = eval_data
-            current_rows.append(
-                create_log_row(
-                    children_genes[i],
-                    children_sigmas[i],
-                    eval_data,
-                    gen,
-                    "offspring",
-                    parent_pairs[i],
-                    design_params=design_params,
-                )
+            children_genes, children_sigmas, parent_pairs = make_offspring(
+                pop_genes, pop_sigmas
             )
+            for i, child in enumerate(children_genes):
+                dup, data = is_duplicate_history(history_rows, child)
+                if dup:
+                    offspring_eval[i] = data
+                    current_rows.append(
+                        create_log_row(
+                            child,
+                            children_sigmas[i],
+                            data,
+                            gen,
+                            "offspring",
+                            parent_pairs[i],
+                        )
+                    )
+                else:
+                    folder = os.path.join(save_root, f"P{POP_SIZE + i + 1}")
+                    tasks_to_run.append(
+                        evaluate_individual_async(
+                            executor, child, folder, POP_SIZE + i + 1
+                        )
+                    )
+                    indices_to_run.append(i)
+
+        if tasks_to_run:
+            print(f"  -> 正在並行評估 {len(tasks_to_run)} 個新子代...")
+            results = await asyncio.gather(*tasks_to_run)
+            for task_idx, (eval_data, design_params) in enumerate(results):
+                original_idx = indices_to_run[task_idx]
+                offspring_eval[original_idx] = eval_data
+                if not design_params.get("aborted"):
+                    current_rows.append(
+                        create_log_row(
+                            children_genes[original_idx],
+                            children_sigmas[original_idx],
+                            eval_data,
+                            gen,
+                            "offspring",
+                            parent_pairs[original_idx],
+                            design_params,
+                        )
+                    )
 
         if any(v is None for v in offspring_eval):
-            raise RuntimeError(f"第 {gen} 代仍有子代未得到評估結果")
+            raise RuntimeError(f"第 {gen} 代有子代未評估")
 
         for i in range(POP_SIZE):
             current_rows.append(
@@ -823,23 +1011,15 @@ def main(args):
                 )
             )
 
-        combined_genes = np.vstack([pop_genes, children_genes])
-        combined_sigmas = np.vstack([pop_sigmas, children_sigmas])
+        combined_genes = np.vstack([pop_genes, np.array(children_genes)])
+        combined_sigmas = np.vstack([pop_sigmas, np.array(children_sigmas)])
         combined_eval = parent_eval + offspring_eval
         fitness_all = [d[0] for d in combined_eval]
         order = np.argsort(fitness_all)[::-1]
 
-        new_genes, new_sigmas, new_eval = [], [], []
-        for idx in order[:POP_SIZE]:
-            new_genes.append(combined_genes[idx])
-            new_sigmas.append(combined_sigmas[idx])
-            new_eval.append(combined_eval[idx])
-
-        pop_genes, pop_sigmas, parent_eval = (
-            np.array(new_genes),
-            np.array(new_sigmas),
-            new_eval,
-        )
+        pop_genes = np.array([combined_genes[i] for i in order[:POP_SIZE]])
+        pop_sigmas = np.array([combined_sigmas[i] for i in order[:POP_SIZE]])
+        parent_eval = [combined_eval[i] for i in order[:POP_SIZE]]
 
         for i in range(POP_SIZE):
             current_rows.append(
@@ -848,48 +1028,68 @@ def main(args):
                 )
             )
 
-        best = max(fitness_all)
-        out = f"fitness_gen{gen}_max{best:.2f}.csv"
+        best_fitness = max((f for f in fitness_all if f > -9990), default=-9999)
+        out = f"fitness_gen{gen}_max{best_fitness:.2f}.csv"
         save_generation_log(current_rows, os.path.join(log_dir, out))
-        print(f"★ Generation {gen} 完成，最佳 fitness = {best:.4f}，日誌：{out}")
+        print(
+            f"★ Generation {gen} 完成，最佳 fitness = {best_fitness:.4f}，日誌：{out}"
+        )
         gc.collect()
 
-    print("\n🎉 所有世代執行完成！")
+    executor.shutdown()
+    if graceful_stop_event.is_set() or immediate_stop_event.is_set():
+        print("\n🛑 程式已由使用者安全停止。")
+    else:
+        print("\n🎉 所有世代執行完成！")
 
 
 if __name__ == "__main__":
-    # 設定命令列參數解析器
-    parser = argparse.ArgumentParser(description="演化策略優化器與模型報告產生器")
+    parser = argparse.ArgumentParser(description="演化策略優化器")
     parser.add_argument("--add-ratios", action="store_true", help="加入邊長比例特徵")
     parser.add_argument(
         "--add-sincos", action="store_true", help="加入角度的 sin/cos 特徵"
     )
     parser.add_argument(
-        "--add-interactions",
-        action="store_true",
-        help="加入邊長與角度的交互作用特徵 (s*s, s*a)",
+        "--no-interactions",
+        dest="add_interactions",
+        action="store_false",
+        help="禁用邊長與角度交互作用 (s*s, s*a)",
     )
     parser.add_argument(
-        "--add-aa-interact",
-        action="store_true",
-        help="加入角度之間的交互作用特徵 (a*a)",
+        "--no-aa-interact",
+        dest="add_aa_interact",
+        action="store_false",
+        help="禁用角度間交互作用 (a*a)",
     )
     parser.add_argument(
-        "--save-report",
-        type=str,
-        metavar="FILENAME",
-        help="將模型係數儲存至指定的 Excel 檔名",
+        "--save-report", type=str, metavar="FILENAME", help="將模型係數儲存至 Excel"
     )
     parser.add_argument(
-        "--report-only", action="store_true", help="僅儲存報告，不執行後續的演化策略"
+        "--report-only", action="store_true", help="僅儲存報告，不執行優化"
     )
-
+    parser.add_argument(
+        "--no-compensation", action="store_true", help="禁用收縮補償模型"
+    )
+    parser.set_defaults(add_interactions=True, add_aa_interact=True)
     cli_args = parser.parse_args()
 
+    if keyboard:
+        setup_keyboard_hooks()
+    else:
+        print(
+            "\n⚠️  未安裝 'keyboard' 模組，無法使用快速鍵停止。請執行 'pip install keyboard'。"
+        )
+
     try:
-        main(cli_args)
+        asyncio.run(main_async(cli_args))
+    except KeyboardInterrupt:
+        print("\n🛑 偵測到 Ctrl+C，正在準備立即停止...")
+        immediate_stop_event.set()
+        graceful_stop_event.set()
     except Exception as e:
         subject = "演化策略主程式發生致命錯誤"
         body = f"錯誤類型: {type(e).__name__}\n錯誤訊息: {e}\n\n追蹤訊息:\n{traceback.format_exc()}"
         print(f"❌ {subject}")
         send_error(subject, body)
+    finally:
+        print("\n程式已結束。")
