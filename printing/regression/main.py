@@ -38,6 +38,7 @@ from compensation_strategies import (
     compensate_without_jacobian,
     compensate_with_random_search,
     compensate_with_genetic_algorithm,
+    compensate_with_nelder_mead,  # 【新】匯入新的補償策略
 )
 
 
@@ -122,7 +123,7 @@ def main():
     )
     ap.add_argument("--sheet", type=str, default="Sheet1", help="Excel 中的工作表名稱")
     ap.add_argument(
-        "--average", action="store_true", help="是否對相同結構的樣本進行平均"
+        "--average", action="store_true", help="是否對相同結構的樣本進行平均", default=True
     )
     ap.add_argument("--save-avg", type=str, default=None, help="儲存平均後資料的路徑")
     ap.add_argument("--eval", action="store_true", help="是否執行模型評估")
@@ -139,17 +140,17 @@ def main():
     group_len.add_argument(
         "--add-interactions",
         action="store_true",
-        help="為【長度模型】加入 '邊長*邊長' 和 '邊長*角度' 交互作用",
+        help="為【長度模型】加入 '邊長*邊長' 和 '邊長*角度' 交互作用",default=True
     )
     group_len.add_argument(
         "--add-len-aa-interact",
         action="store_true",
-        help="【新增】為【長度模型】加入 '角度*角度' 交互作用",
+        help="【新增】為【長度模型】加入 '角度*角度' 交互作用",default=True
     )
-    group_len.add_argument("--len-huber-alpha", type=float, default=1e-3)
+    group_len.add_argument("--len-huber-alpha", type=float, default=1e-31)
     group_len.add_argument("--len-huber-eps", type=float, default=1.35)
     group_len.add_argument("--len-huber-max-iter", type=int, default=2000)
-    group_len.add_argument("--scale-length", action="store_true")
+    group_len.add_argument("--scale-length", action="store_true", default=True)
     group_len.add_argument("--len-rf-n-est", type=int, default=300)
     group_len.add_argument("--len-rf-max-depth", type=int, default=None)
     group_len.add_argument("--len-rf-min-leaf", type=int, default=1)
@@ -161,17 +162,18 @@ def main():
     # 角度模型參數
     group_ang = ap.add_argument_group("Angle Model Parameters")
     group_ang.add_argument(
-        "--angle-model", type=str, default="rf", choices=["ols", "rf", "huber"]
+        "--angle-model", type=str, default="huber", choices=["ols", "rf", "huber"]
     )
     group_ang.add_argument(
         "--add-angle-interactions",
         action="store_true",
         help="為【角度模型】加入 '邊長*邊長' 和 '邊長*角度' 交互作用",
+        default=True,
     )
     group_ang.add_argument(
         "--add-angle-aa-interact",
         action="store_true",
-        help="【新增】為【角度模型】加入 '角度*角度' 交互作用",
+        help="為【角度模型】加入 '邊長*邊長' 和 '邊長*角度' 交互作用",default=True
     )
     group_ang.add_argument(
         "--angle-poly",
@@ -192,16 +194,16 @@ def main():
     group_ang.add_argument(
         "--angle-huber-alpha",
         type=float,
-        default=1e-3,
+        default=1e-2,
         help="角度 Huber 模型的 Alpha (正規化強度)",
     )
     group_ang.add_argument(
         "--angle-huber-eps",
         type=float,
-        default=1.35,
+        default=10,
         help="角度 Huber 模型的 Epsilon (穩健性參數)",
     )
-    group_ang.add_argument("--scale-angle", action="store_true")
+    group_ang.add_argument("--scale-angle", action="store_true", default=True)
     group_ang.add_argument("--add-angle-sincos", action="store_true")
     group_ang.add_argument("--add-ratios", action="store_true")
 
@@ -209,8 +211,14 @@ def main():
     ap.add_argument(
         "--strategy",
         type=str,
-        default="jacobian",
-        choices=["jacobian", "direct", "search", "ga"],
+        default="nelder-mead",  # 【修改】將新方法設為預設
+        choices=[
+            "jacobian",
+            "direct",
+            "search",
+            "ga",
+            "nelder-mead",
+        ],  # 【修改】加入新選項
         help="選擇補償策略",
     )
     args = ap.parse_args()
@@ -263,9 +271,9 @@ def main():
 
     # --- 3. 執行補償策略 ---
     target_design_independent = {
-        "Design_s2(mm)": 0.59,
-        "Design_s3(mm)": 0.59,
-        "Design_a3(deg)": 33,
+        "Design_s2(mm)":1,
+        "Design_s3(mm)": 1.06,
+        "Design_a3(deg)": 33.63,
     }
     target_design = apply_geometric_constraints(target_design_independent)
 
@@ -288,6 +296,10 @@ def main():
         )
     elif args.strategy == "ga":
         compensated_design = compensate_with_genetic_algorithm(
+            model_len, model_ang, target_design, df_use
+        )
+    elif args.strategy == "nelder-mead":  # 【新】執行 Nelder-Mead 策略
+        compensated_design = compensate_with_nelder_mead(
             model_len, model_ang, target_design, df_use
         )
 

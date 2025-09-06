@@ -6,8 +6,9 @@ calculate_training_error.py
   1. 使用「全部」的資料來訓練長度與角度模型。
   2. 使用訓練好的模型，回頭去預測「全部」的資料。
   3. 計算每一筆資料的預測尺寸/角度與真實量測值之間的誤差。
-  4. 匯總所有誤差，並計算總體的 MAE 和 RMSE。
-  5. (新增) 選擇性地產生並儲存視覺化診斷圖表。
+  4. (新增) 同時計算尺寸 (s2, s3) 的預測收縮率與實際收縮率的誤差。
+  5. 匯總所有誤差，並計算總體的 MAE 和 RMSE。
+  6. (新增) 選擇性地產生並儲存視覺化診斷圖表。
 - 這個腳本的目的是評估模型的「擬合能力」，而非「泛化能力」。
 """
 import argparse
@@ -56,27 +57,114 @@ def calculate_in_sample_error(
     # 3. 計算尺寸、角度與誤差
     results_df = df_all_data[FEATURES].copy()
 
+    # --- 尺寸 s2 ---
     results_df["Actual_DIP_s2(mm)"] = df_all_data["DIP_s2(mm)"]
     predicted_dip_s2 = df_all_data["Design_s2(mm)"] * (1 - pred_len_df["delta_s2"])
     results_df["Predicted_DIP_s2(mm)"] = predicted_dip_s2
     results_df["Error_s2(mm)"] = predicted_dip_s2 - df_all_data["DIP_s2(mm)"]
 
+    # --- 尺寸 s3 ---
     results_df["Actual_DIP_s3(mm)"] = df_all_data["DIP_s3(mm)"]
     predicted_dip_s3 = df_all_data["Design_s3(mm)"] * (1 - pred_len_df["delta_s3"])
     results_df["Predicted_DIP_s3(mm)"] = predicted_dip_s3
     results_df["Error_s3(mm)"] = predicted_dip_s3 - df_all_data["DIP_s3(mm)"]
 
+    # --- 角度 a3 ---
     results_df["Actual_DIP_a3(deg)"] = df_all_data["DIP_a3(deg)"]
     results_df["Predicted_DIP_a3(deg)"] = pred_ang_df["DIP_a3(deg)"]
     results_df["Error_a3(deg)"] = (
         pred_ang_df["DIP_a3(deg)"] - df_all_data["DIP_a3(deg)"]
     )
 
+    # === 【新增】計算尺寸收縮率 (s2, s3) 與其誤差 ===
+    # 實際收縮率 (來自資料)
+    results_df["Actual_delta_s2(%)"] = df_all_data["delta_s2"] * 100
+    results_df["Actual_delta_s3(%)"] = df_all_data["delta_s3"] * 100
+
+    # 預測收縮率 (來自模型)
+    results_df["Predicted_delta_s2(%)"] = pred_len_df["delta_s2"] * 100
+    results_df["Predicted_delta_s3(%)"] = pred_len_df["delta_s3"] * 100
+
+    # 收縮率誤差 (Predicted - Actual)
+    results_df["Error_delta_s2(%)"] = (
+        pred_len_df["delta_s2"] - df_all_data["delta_s2"]
+    ) * 100
+    results_df["Error_delta_s3(%)"] = (
+        pred_len_df["delta_s3"] - df_all_data["delta_s3"]
+    ) * 100
+
     print("誤差計算完成。")
     return results_df, model_len, model_ang
 
 
-# 【新增】產生並儲存診斷圖表的函式
+def _generate_diagnostic_plots_for_target(
+    results_df: pd.DataFrame,
+    target_name: str,
+    design_col: str,
+    unit: str,
+    prefix: str,
+):
+    """
+    為單一目標（如 s2, a3）產生一組標準的診斷圖表。
+    這是一個輔助函式，由 generate_and_save_plots 調用。
+    """
+    # 根據目標名稱決定欄位名稱
+    if target_name.startswith("delta"):
+        actual_col = f"Actual_{target_name}({unit})"
+        predicted_col = f"Predicted_{target_name}({unit})"
+        error_col = f"Error_{target_name}({unit})"
+        title_prefix = f"Shrinkage {target_name.replace('delta_', '')}"
+    else:
+        actual_col = f"Actual_DIP_{target_name}({unit})"
+        predicted_col = f"Predicted_DIP_{target_name}({unit})"
+        error_col = f"Error_{target_name}({unit})"
+        title_prefix = (
+            f"Dimension {target_name}" if unit == "mm" else f"Angle {target_name}"
+        )
+
+    # --- 圖表 1: 預測值 vs. 實際值 ---
+    plt.figure(figsize=(8, 8))
+    sns.scatterplot(data=results_df, x=actual_col, y=predicted_col, alpha=0.7)
+    min_val = min(results_df[actual_col].min(), results_df[predicted_col].min())
+    max_val = max(results_df[actual_col].max(), results_df[predicted_col].max())
+    plt.plot([min_val, max_val], [min_val, max_val], "r--", lw=2, label="Ideal (y=x)")
+    plt.title(f"{title_prefix}: Predicted vs. Actual Values")
+    plt.xlabel(f"Actual Value ({unit})")
+    plt.ylabel(f"Predicted Value ({unit})")
+    plt.legend()
+    plt.axis("equal")
+    plt.grid(True)
+    plot_path_1 = f"{prefix}_{target_name}_predicted_vs_actual.png"
+    plt.savefig(plot_path_1)
+    plt.close()
+    print(f"    - 已儲存圖表: {plot_path_1}")
+
+    # --- 圖表 2: 誤差分佈圖 ---
+    plt.figure(figsize=(10, 6))
+    sns.histplot(data=results_df, x=error_col, kde=True, bins=20)
+    plt.axvline(0, color="red", linestyle="--", lw=2)
+    plt.title(f"Distribution of {title_prefix} Error")
+    plt.xlabel(f"Error ({unit}) [Predicted - Actual]")
+    plt.ylabel("Frequency")
+    plot_path_2 = f"{prefix}_{target_name}_error_distribution.png"
+    plt.savefig(plot_path_2)
+    plt.close()
+    print(f"    - 已儲存圖表: {plot_path_2}")
+
+    # --- 圖表 3: 誤差 vs. 設計值 ---
+    plt.figure(figsize=(10, 6))
+    sns.scatterplot(data=results_df, x=design_col, y=error_col, alpha=0.7)
+    plt.axhline(0, color="red", linestyle="--", lw=2)
+    plt.title(f"{title_prefix} Error vs. Design Value")
+    plt.xlabel(f"Design Value ({design_col})")
+    plt.ylabel(f"Error ({unit})")
+    plot_path_3 = f"{prefix}_{target_name}_error_vs_design.png"
+    plt.savefig(plot_path_3)
+    plt.close()
+    print(f"    - 已儲存圖表: {plot_path_3}")
+
+
+# 【修改】產生並儲存診斷圖表的函式
 def generate_and_save_plots(results_df: pd.DataFrame, prefix: str = "training_error"):
     """
     根據結果 DataFrame 產生並儲存一系列診斷圖表。
@@ -84,55 +172,25 @@ def generate_and_save_plots(results_df: pd.DataFrame, prefix: str = "training_er
     print("\n正在產生診斷圖表...")
     plt.style.use("seaborn-v0_8-whitegrid")
 
-    # --- 圖表 1: a3 預測值 vs. 實際值 ---
-    plt.figure(figsize=(8, 8))
-    sns.scatterplot(
-        data=results_df, x="Actual_DIP_a3(deg)", y="Predicted_DIP_a3(deg)", alpha=0.7
-    )
-    # 加上 y=x 參考線
-    min_val = min(
-        results_df["Actual_DIP_a3(deg)"].min(),
-        results_df["Predicted_DIP_a3(deg)"].min(),
-    )
-    max_val = max(
-        results_df["Actual_DIP_a3(deg)"].max(),
-        results_df["Predicted_DIP_a3(deg)"].max(),
-    )
-    plt.plot([min_val, max_val], [min_val, max_val], "r--", lw=2, label="Ideal (y=x)")
-    plt.title("Angle a3: Predicted vs. Actual Values")
-    plt.xlabel("Actual DIP_a3 (deg)")
-    plt.ylabel("Predicted DIP_a3 (deg)")
-    plt.legend()
-    plt.axis("equal")
-    plt.grid(True)
-    plot_path_1 = f"{prefix}_a3_predicted_vs_actual.png"
-    plt.savefig(plot_path_1)
-    plt.close()
-    print(f"    - 已儲存圖表: {plot_path_1}")
+    # 定義要繪圖的目標及其對應的設計欄位和單位
+    targets_to_plot = {
+        "s2": {"unit": "mm", "design_col": "Design_s2(mm)"},
+        "s3": {"unit": "mm", "design_col": "Design_s3(mm)"},
+        "a3": {"unit": "deg", "design_col": "Design_a3(deg)"},
+        "delta_s2": {"unit": "%", "design_col": "Design_s2(mm)"},
+        "delta_s3": {"unit": "%", "design_col": "Design_s3(mm)"},
+    }
 
-    # --- 圖表 2: a3 誤差分佈圖 ---
-    plt.figure(figsize=(10, 6))
-    sns.histplot(data=results_df, x="Error_a3(deg)", kde=True, bins=20)
-    plt.axvline(0, color="red", linestyle="--", lw=2)
-    plt.title("Distribution of Angle a3 Error")
-    plt.xlabel("Error_a3 (deg) [Predicted - Actual]")
-    plt.ylabel("Frequency")
-    plot_path_2 = f"{prefix}_a3_error_distribution.png"
-    plt.savefig(plot_path_2)
-    plt.close()
-    print(f"    - 已儲存圖表: {plot_path_2}")
-
-    # --- 圖表 3: a3 誤差 vs. 設計角度 ---
-    plt.figure(figsize=(10, 6))
-    sns.scatterplot(data=results_df, x="Design_a3(deg)", y="Error_a3(deg)", alpha=0.7)
-    plt.axhline(0, color="red", linestyle="--", lw=2)
-    plt.title("Angle a3 Error vs. Design Angle")
-    plt.xlabel("Design_a3 (deg)")
-    plt.ylabel("Error_a3 (deg)")
-    plot_path_3 = f"{prefix}_a3_error_vs_design_angle.png"
-    plt.savefig(plot_path_3)
-    plt.close()
-    print(f"    - 已儲存圖表: {plot_path_3}")
+    # 循環為每個目標產生圖表
+    for target_name, config in targets_to_plot.items():
+        print(f"\n--- 正在為 '{target_name}' 產生圖表 ---")
+        _generate_diagnostic_plots_for_target(
+            results_df=results_df,
+            target_name=target_name,
+            design_col=config["design_col"],
+            unit=config["unit"],
+            prefix=prefix,
+        )
 
 
 def main():
@@ -155,8 +213,14 @@ def main():
         default="training_error_results_0.6_0.9.xlsx",
         help="儲存詳細評估結果的 Excel 檔路徑",
     )
-    # 【新增】儲存圖表的命令列參數
     ap.add_argument("--save-plots", action="store_true", help="是否產生並儲存診斷圖表")
+    # 【新增】儲存平均資料的參數
+    ap.add_argument(
+        "--save-averaged-data",
+        type=str,
+        default=None,
+        help="如果設定了 --average，則將平均後的資料儲存到指定的 Excel 檔案路徑",
+    )
 
     # --- 模型與特徵參數 ---
     group_len = ap.add_argument_group("Length Model Parameters")
@@ -168,7 +232,7 @@ def main():
     group_len.add_argument("--len-huber-alpha", type=float, default=1e-3)
     group_len.add_argument("--len-huber-eps", type=float, default=1.35)
     group_len.add_argument("--len-huber-max-iter", type=int, default=2000)
-    group_len.add_argument("--scale-length", action="store_true")
+    group_len.add_argument("--scale-length", action="store_true", default=True)
     group_len.add_argument("--len-rf-n-est", type=int, default=300)
     group_len.add_argument("--len-rf-max-depth", type=int, default=None)
     group_len.add_argument("--len-rf-min-leaf", type=int, default=1)
@@ -194,7 +258,7 @@ def main():
     group_ang.add_argument("--angle-huber-max-iter", type=int, default=2000)
     group_ang.add_argument("--angle-huber-alpha", type=float, default=1e-2)
     group_ang.add_argument("--angle-huber-eps", type=float, default=10)
-    group_ang.add_argument("--scale-angle", action="store_true")
+    group_ang.add_argument("--scale-angle", action="store_true", default=True)
     group_ang.add_argument("--add-angle-sincos", action="store_true")
     group_ang.add_argument("--add-ratios", action="store_true")
 
@@ -226,6 +290,14 @@ def main():
         cols_to_average = TARGETS + ["DIP_s2(mm)", "DIP_s3(mm)"]
         cols_to_average = sorted(list(set(cols_to_average)))
         df_use = df_raw.groupby(FEATURES, as_index=False)[cols_to_average].mean()
+
+        # 【新增】如果使用者指定了路徑，就儲存平均後的資料
+        if args.save_averaged_data:
+            try:
+                df_use.to_excel(args.save_averaged_data, index=False)
+                print(f"[已儲存] 平均後的訓練資料已儲存至 -> {args.save_averaged_data}")
+            except Exception as e:
+                print(f"\n[錯誤] 無法儲存平均後的資料檔案: {e}")
     else:
         df_use = df_raw.copy()
 
@@ -248,6 +320,7 @@ def main():
     print("=== 訓練集擬合誤差總結 ===")
     print("=" * 50)
 
+    # 尺寸與角度誤差
     mae_s2 = results_df["Error_s2(mm)"].abs().mean()
     rmse_s2 = np.sqrt((results_df["Error_s2(mm)"] ** 2).mean())
     mae_s3 = results_df["Error_s3(mm)"].abs().mean()
@@ -255,12 +328,22 @@ def main():
     mae_a3 = results_df["Error_a3(deg)"].abs().mean()
     rmse_a3 = np.sqrt((results_df["Error_a3(deg)"] ** 2).mean())
 
+    # 【新增】收縮率誤差
+    mae_delta_s2 = results_df["Error_delta_s2(%)"].abs().mean()
+    rmse_delta_s2 = np.sqrt((results_df["Error_delta_s2(%)"] ** 2).mean())
+    mae_delta_s3 = results_df["Error_delta_s3(%)"].abs().mean()
+    rmse_delta_s3 = np.sqrt((results_df["Error_delta_s3(%)"] ** 2).mean())
+
     print("\n--- 整體擬合誤差 (In-Sample Error) ---")
     print(f"  s2 尺寸 MAE : {mae_s2:.6f} mm")
     print(f"  s2 尺寸 RMSE: {rmse_s2:.6f} mm")
+    print(f"  s2 收縮率 MAE : {mae_delta_s2:.6f} %")
+    print(f"  s2 收縮率 RMSE: {rmse_delta_s2:.6f} %")
     print("-" * 25)
     print(f"  s3 尺寸 MAE : {mae_s3:.6f} mm")
     print(f"  s3 尺寸 RMSE: {rmse_s3:.6f} mm")
+    print(f"  s3 收縮率 MAE : {mae_delta_s3:.6f} %")
+    print(f"  s3 收縮率 RMSE: {rmse_delta_s3:.6f} %")
     print("-" * 25)
     print(f"  a3 角度 MAE : {mae_a3:.6f} deg")
     print(f"  a3 角度 RMSE: {rmse_a3:.6f} deg")
@@ -299,3 +382,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# python calculate_training_error.py --average --save-averaged-data averaged_data.xlsx --add-interactions --add-len-aa-interact --scale-length --scale-angle --add-angle-interactions --save-results 20250905training_error_results_0.6_0.9.xlsx --save-plots
