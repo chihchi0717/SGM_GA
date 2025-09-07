@@ -138,13 +138,7 @@ def save_generation_log(rows, filepath):
 
 
 # In utils.py, replace the 'resume_from_log' function with this new version.
-
-
 def resume_from_log():
-    """
-    Resumes progress by finding the latest log file and checking if the generation was completed.
-    If not completed, it identifies and returns the individuals that still need evaluation.
-    """
     log_dir = config.LOG_DIR
     try:
         os.makedirs(log_dir, exist_ok=True)
@@ -169,87 +163,45 @@ def resume_from_log():
     latest_filepath = os.path.join(log_dir, latest_file)
     try:
         df = pd.read_csv(latest_filepath)
-        # Check if the generation is complete by looking for the 'parent' role (survivors for the next gen)
         is_complete = "parent" in df["role"].values
 
+        # 【邏輯修正】: 定義正確的基因欄位名稱
+        gene_columns = ['Design_S2', 'Design_S3', 'Design_A3']
+        
+        # 處理欄位可能不存在的舊格式日誌
+        if 'S2' in df.columns and 'Design_S2' not in df.columns:
+            gene_columns = ['S2', 'S3', 'A3']
+        elif not all(col in df.columns for col in gene_columns):
+             print(f"⚠️ 日誌檔案 '{latest_file}' 缺少必要的基因欄位。將從頭開始。")
+             return 1, None, None, [], []
+
         if is_complete:
-            print(
-                f"✅ Generation {latest_gen_num} is complete. Starting new generation {latest_gen_num + 1}."
-            )
+            print(f"✅ 第 {latest_gen_num} 代已完成。將從新的第 {latest_gen_num + 1} 代開始。")
             start_gen = latest_gen_num + 1
             final_parents = df[df["role"] == "parent"]
-            pop_genes = final_parents[["S2", "S3", "A3"]].to_numpy(dtype=float)
-            pop_sigmas = final_parents[["sigma1", "sigma2", "sigma3"]].to_numpy(
-                dtype=float
-            )
+            
+            pop_genes = final_parents[gene_columns].to_numpy(dtype=float)
+            pop_sigmas = final_parents[["sigma1", "sigma2", "sigma3"]].to_numpy(dtype=float)
+            
             return start_gen, pop_genes, pop_sigmas, [], []
-
         else:
-            # Generation is incomplete, we need to resume it.
-            print(f"🔁 Resuming incomplete generation {latest_gen_num}.")
+            # 簡化恢復邏輯：如果世代未完成，則從該世代的初始父代重新開始
+            print(f"🔁 偵測到未完成的第 {latest_gen_num} 代，將從此代重新開始評估。")
             start_gen = latest_gen_num
-
-            # The parents are the 'parent_old' from the log file
+            
             parent_old_df = df[df["role"] == "parent_old"]
             if parent_old_df.empty:
-                print(
-                    f"⚠️ Log for gen {start_gen} is corrupt (missing 'parent_old'). Starting over."
-                )
+                print(f"⚠️ 第 {start_gen} 代日誌損毀 (找不到 'parent_old' 資訊)，將從頭開始。")
                 return 1, None, None, [], []
 
-            pop_genes = parent_old_df[["S2", "S3", "A3"]].to_numpy(dtype=float)
-            pop_sigmas = parent_old_df[["sigma1", "sigma2", "sigma3"]].to_numpy(
-                dtype=float
-            )
-
-            evaluated_results = []
-            unevaluated_tasks = []
-
-            # Combine all individuals from the log to check their status
-            all_individuals_df = df[df["role"].isin(["parent_old", "child"])].copy()
-            all_individuals_df.reset_index(
-                drop=True, inplace=True
-            )  # Reset index for loop_num
-
-            for index, row in all_individuals_df.iterrows():
-                loop_num = index + 1
-                genes = row[["S2", "S3", "A3"]].to_numpy(dtype=float)
-                sigmas = row[["sigma1", "sigma2", "sigma3"]].to_numpy(dtype=float)
-                parent_indices = (row["parent1_idx"], row["parent2_idx"])
-
-                # Check for a valid fitness value. NaN or empty indicates unevaluated.
-                if pd.notna(row["fitness"]) and row["fitness"] != "":
-                    # This individual has been evaluated
-                    angle_eff_dict = {
-                        angle: safe_float(row.get(f"eff_{angle}", 0.0))
-                        for angle in range(10, 91, 10)
-                    }
-                    eval_result = (
-                        safe_float(row["fitness"]),
-                        safe_float(row["efficiency"]),
-                        safe_float(row["process_score"]),
-                        angle_eff_dict,
-                        {"s2": genes[0], "s3": genes[1], "a3": genes[2]},
-                    )
-                    evaluated_results.append(eval_result)
-                else:
-                    # This individual needs to be evaluated
-                    task_data = (loop_num, genes, sigmas, row["role"])
-                    unevaluated_tasks.append((task_data, start_gen, parent_indices))
-
-            print(
-                f"Found {len(evaluated_results)} completed individuals and {len(unevaluated_tasks)} remaining tasks."
-            )
-            return (
-                start_gen,
-                pop_genes,
-                pop_sigmas,
-                evaluated_results,
-                unevaluated_tasks,
-            )
+            pop_genes = parent_old_df[gene_columns].to_numpy(dtype=float)
+            pop_sigmas = parent_old_df[["sigma1", "sigma2", "sigma3"]].to_numpy(dtype=float)
+            
+            # 返回空列表，觸發對該世代的重新評估
+            return start_gen, pop_genes, pop_sigmas, [], []
 
     except Exception as e:
-        print(f"❌ Error reading log file '{latest_filepath}': {e}. Starting over.")
+        print(f"❌ 讀取日誌檔案 '{latest_filepath}' 時發生錯誤: {e}。將從頭開始。")
         return 1, None, None, [], []
 
 

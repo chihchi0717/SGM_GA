@@ -224,7 +224,7 @@ class PrismBuilder:
         equ_bc = lambda x: slope_bc * x + intercept_bc
         top = (math.floor(equ_bc(0) / self.pixel_size)) * self.pixel_size
         bottom = (math.ceil(equ_ac(0) / self.pixel_size)) * self.pixel_size
-        print(f"Cx: {Cx:.2f}, Cy: {Cy:.2f}")
+        # print(f"Cx: {Cx:.2f}, Cy: {Cy:.2f}")
         if mode == "triangle":
             top = equ_bc(0)
             bottom = equ_ac(0)

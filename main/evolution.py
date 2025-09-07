@@ -498,13 +498,9 @@ async def main_async(args: argparse.Namespace):
     utils.set_output_dir(output_dir)
     os.makedirs(config.LOG_DIR, exist_ok=True)
 
-    # --- **MODIFIED RESUME LOGIC** ---
-    start_gen, pop_genes, pop_sigmas, evaluated_results, unevaluated_tasks = (
-        utils.resume_from_log()
-    )
+    start_gen, pop_genes, pop_sigmas, _, _ = utils.resume_from_log()
 
-    if start_gen == 1 and not unevaluated_tasks:
-        print("--- Starting a fresh evolution run. ---")
+    if start_gen == 1:
         pop_genes = np.random.rand(config.POP_SIZE, config.N_VARS)
         pop_genes[:, :2] = (
             pop_genes[:, :2] * (config.SIDE_BOUND[1] - config.SIDE_BOUND[0])
@@ -518,199 +514,175 @@ async def main_async(args: argparse.Namespace):
             [config.VAR_RANGES * config.INITIAL_SIGMA_FACTOR] * config.POP_SIZE
         )
 
-    print(f"\n--- Starting Evolution from Generation {start_gen} ---")
-    copy_scm_to_all_folders(output_dir)
+    print(f"\n--- 從第 {start_gen} 代開始演化 ---")
+    copy_scm_to_all_folders(utils.get_output_dir())
 
     for gen in range(start_gen, config.N_GENERATIONS + 1):
         if utils.graceful_stop_event.is_set():
             break
-        print(f"\n--- Generation {gen}/{config.N_GENERATIONS} ---")
+        print(f"\n--- 第 {gen}/{config.N_GENERATIONS} 代 ---")
 
-        # This will hold all results for the current generation
-        all_gen_results = list(evaluated_results)
-
-        # --- **MODIFIED EXECUTION FLOW** ---
-        # If there are unevaluated tasks from a previous run, execute them first.
-        # 1. 評估父代 (如果需要)
+        # 1. 評估父代，並只保留成功的個體
         parent_eval = []
-        if not unevaluated_tasks:  # 只有在新的一代才需要評估父代
-            with ThreadPoolExecutor(max_workers=config.MAX_WORKERS) as executor:
-                futures = [
-                    executor.submit(
-                        evaluate_individual,
-                        (i + 1, pop_genes[i], pop_sigmas[i], "parent_old"),
-                        gen,
-                        (-1, -1),
-                    )
-                    for i in range(config.POP_SIZE)
-                ]
-                parent_eval = [f.result() for f in futures if f.result() is not None]
-        else:  # 如果是從中斷處恢復，父代評估結果已從日誌讀取
-            parent_eval = list(evaluated_results)
-            # 執行未完成的任務
-            with ThreadPoolExecutor(max_workers=config.MAX_WORKERS) as executor:
-                futures = [
-                    executor.submit(evaluate_individual, task[0], task[1], task[2])
-                    for task in unevaluated_tasks
-                ]
-                newly_evaluated = [
-                    f.result() for f in futures if f.result() is not None
-                ]
-                parent_eval.extend(newly_evaluated)
+        successful_parent_genes = np.array([])
+        successful_parent_sigmas = np.array([])
 
-        # 2. 透過突變產生子代 (統一資料結構)
-        children_genes, children_sigmas, children_parent_indices = [], [], []
-        for _ in range(config.OFFSPRING_SIZE):
-            parent_idx = random.randrange(config.POP_SIZE)
-            child_gene, child_sigma = mutate_individual(
-                pop_genes[parent_idx], pop_sigmas[parent_idx], args.mutation_adaptation
-            )
-            children_genes.append(child_gene)
-            children_sigmas.append(child_sigma)
-            children_parent_indices.append((parent_idx, -1))
-
-        # 3. 評估子代
-        offspring_eval = []
         with ThreadPoolExecutor(max_workers=config.MAX_WORKERS) as executor:
-            tasks = {
+            future_to_idx = {
                 executor.submit(
                     evaluate_individual,
-                    (
-                        i + 1 + config.POP_SIZE,
-                        children_genes[i],
-                        children_sigmas[i],
-                        "child",
-                    ),
+                    (i + 1, pop_genes[i], pop_sigmas[i], "parent_old"),
                     gen,
-                    children_parent_indices[i],
+                    (-1, -1),
                 ): i
-                for i in range(config.OFFSPRING_SIZE)
+                for i in range(len(pop_genes))
             }
-            # 確保結果與原始子代對應
-            results_with_indices = [
-                (tasks[future], future.result()) for future in tasks if future.result()
-            ]
-            # 排序以保持一致性
-            results_with_indices.sort(key=lambda x: x[0])
-            offspring_eval = [res for _, res in results_with_indices]
-            # 同時過濾掉失敗評估的子代基因與標準差
-            successful_indices = [idx for idx, _ in results_with_indices]
-            successful_children_genes = [children_genes[i] for i in successful_indices]
-            successful_children_sigmas = [
-                children_sigmas[i] for i in successful_indices
-            ]
-            successful_children_parents = [
-                children_parent_indices[i] for i in successful_indices
-            ]
 
-        # 4. 根據選擇策略合併族群
-        print(
-            f"策略: ({'μ+λ' if args.selection_strategy == 'plus' else 'μ,λ'}), 突變: {args.mutation_adaptation}"
-        )
+            eval_map = {}
+            for future in future_to_idx:
+                try:
+                    result = future.result()
+                    if result:
+                        eval_map[future_to_idx[future]] = result
+                except Exception as exc:
+                    print(f"個體評估產生例外: {exc}")
 
+            successful_indices = sorted(eval_map.keys())
+            if successful_indices:
+                parent_eval = [eval_map[i] for i in successful_indices]
+                successful_parent_genes = pop_genes[successful_indices]
+                successful_parent_sigmas = pop_sigmas[successful_indices]
+
+        if len(successful_parent_genes) == 0:
+            print(f"❌ 第 {gen} 代所有父代均評估失敗，無法產生子代。演化終止。")
+            break
+
+        # 2. 從成功的父代中產生並評估子代
+        children_data = []
+        for _ in range(config.OFFSPRING_SIZE):
+            parent_idx = random.randrange(len(successful_parent_genes))
+            child_gene, child_sigma = mutate_individual(
+                successful_parent_genes[parent_idx],
+                successful_parent_sigmas[parent_idx],
+                args.mutation_adaptation,
+            )
+            children_data.append((child_gene, child_sigma, (parent_idx, -1)))
+
+        offspring_results = []
+        with ThreadPoolExecutor(max_workers=config.MAX_WORKERS) as executor:
+            future_to_data = {
+                executor.submit(
+                    evaluate_individual,
+                    (i + 1 + config.POP_SIZE, c_data[0], c_data[1], "child"),
+                    gen,
+                    c_data[2],
+                ): c_data
+                for i, c_data in enumerate(children_data)
+            }
+            for future in future_to_data:
+                try:
+                    result = future.result()
+                    if result:
+                        offspring_results.append((future_to_data[future], result))
+                except Exception as exc:
+                    print(f"子代評估產生例外: {exc}")
+
+        successful_children_data = [info for info, _ in offspring_results]
+        offspring_eval = [res for _, res in offspring_results]
+
+        # 3. 根據選擇策略合併族群
         if args.selection_strategy == "plus":
-            combined_genes = np.vstack([pop_genes] + successful_children_genes)
-            combined_sigmas = np.vstack([pop_sigmas] + successful_children_sigmas)
+            combined_genes_list = list(successful_parent_genes) + [
+                data[0] for data in successful_children_data
+            ]
+            combined_sigmas_list = list(successful_parent_sigmas) + [
+                data[1] for data in successful_children_data
+            ]
             combined_eval = parent_eval + offspring_eval
-        else:
-            combined_genes = np.array(successful_children_genes)
-            combined_sigmas = np.array(successful_children_sigmas)
+        else:  # 'comma'
+            combined_genes_list = [data[0] for data in successful_children_data]
+            combined_sigmas_list = [data[1] for data in successful_children_data]
             combined_eval = offspring_eval
 
-        if len(combined_eval) < config.POP_SIZE and args.selection_strategy == "comma":
-            print(
-                f"⚠️ 警告：(μ,λ)策略下，存活的子代數量 ({len(combined_eval)}) 少於下一代要求的父代數量 ({config.POP_SIZE})。"
-            )
-            if not combined_eval:
-                print("❌ (μ,λ)策略下沒有任何子代存活，演化終止。")
-                break
+        if not combined_eval:
+            print("❌ 所有個體評估均失敗或沒有子代存活，無法進行選擇。演化終止。")
+            break
 
-        # 1. 從合併後的族群中，提取出「原始的、未經修改的」fitness 列表
+        combined_genes = np.array(combined_genes_list)
+        combined_sigmas = np.array(combined_sigmas_list)
+
+        # 4. 應用多樣性懲罰並選擇
         original_fitness_all = [d[0] for d in combined_eval]
-
-        # 2. **立即計算真實的最佳 fitness**，這個值將用於報告和檔名
         true_best_fitness = max(original_fitness_all, default=-9999)
 
-        # 3. 準備一個「用於選擇」的 fitness 列表，它可能會被後續步驟修改
         fitness_for_selection = original_fitness_all
-
-        # 4. 如果啟用多樣性控制，則計算調整後的 fitness，並用它來排序
-        if args.diversity_control:
-            print("--- 正在應用多樣性懲罰 ---")
-            # 準備用於計算距離的基因
-            if args.selection_strategy == "plus":
-                genes_for_diversity = np.vstack([pop_genes] + successful_children_genes)
-            else:  # comma strategy
-                genes_for_diversity = np.array(successful_children_genes)
-
-            # 使用調整後的 fitness 來進行選擇
+        if args.diversity_control and len(combined_genes) > 1:
             fitness_for_selection = apply_diversity_penalty(
-                genes_for_diversity, original_fitness_all
+                combined_genes, original_fitness_all
             )
 
-        # 5. **使用「用於選擇的 fitness」進行排序**，以決定誰能存活
         order = np.argsort(fitness_for_selection)[::-1]
 
-        # 6. 根據排序結果，選出下一代父代
+        # 5. 選出下一代父代
         survivor_indices = order[: config.POP_SIZE]
-        next_pop_genes = np.array([combined_genes[i] for i in survivor_indices])
-        next_pop_sigmas = np.array([combined_sigmas[i] for i in survivor_indices])
-        next_pop_eval = [
-            combined_eval[i] for i in survivor_indices
-        ]  # 存活者的評估結果仍然是原始的
+        next_pop_genes = combined_genes[survivor_indices]
+        next_pop_sigmas = combined_sigmas[survivor_indices]
+        next_pop_eval = [combined_eval[i] for i in survivor_indices]
 
         # 6. 記錄日誌
         current_rows = []
-        # 記錄被評估的父代
         for i in range(len(parent_eval)):
             current_rows.append(
                 utils.create_log_row(
-                    pop_genes[i],
-                    pop_sigmas[i],
+                    successful_parent_genes[i],
+                    successful_parent_sigmas[i],
                     parent_eval[i],
                     gen,
                     "parent_old",
                     (-1, -1),
                 )
             )
-        # 記錄被評估的子代
         for i in range(len(offspring_eval)):
             current_rows.append(
                 utils.create_log_row(
-                    successful_children_genes[i],
-                    successful_children_sigmas[i],
+                    successful_children_data[i][0],
+                    successful_children_data[i][1],
                     offspring_eval[i],
                     gen,
                     "child",
-                    successful_children_parents[i],
-                )
-            )
-        # 記錄被選為下一代父代的個體
-        for i in range(len(next_pop_genes)):
-            current_rows.append(
-                utils.create_log_row(
-                    next_pop_genes[i],
-                    next_pop_sigmas[i],
-                    next_pop_eval[i],
-                    gen,
-                    "parent",
-                    (-1, -1),
+                    successful_children_data[i][2],
                 )
             )
 
-        # 8. **使用第 2 步計算的「真實最佳 fitness」來生成檔名和輸出訊息**
+        # --- 【關鍵修正】 ---
+        # 只有在成功評估了子代 (即發生了探索) 的情況下，才記錄 'parent' 角色，
+        # 這才能標誌著一個世代的真正完成。
+        generation_is_truly_complete = len(offspring_eval) == config.OFFSPRING_SIZE
+        if generation_is_truly_complete:
+            for i in range(len(next_pop_eval)):
+                current_rows.append(
+                    utils.create_log_row(
+                        next_pop_genes[i],
+                        next_pop_sigmas[i],
+                        next_pop_eval[i],
+                        gen,
+                        "parent",
+                        (-1, -1),
+                    )
+                )
+        else:
+            print(f"⚠️ 第 {gen} 代未完成全部子代評估，在下次啟動時重新執行。")
+
         out_filename = f"fitness_gen{gen}_max{true_best_fitness:.2f}.csv"
         log_filepath = os.path.join(config.LOG_DIR, out_filename)
         utils.save_generation_log(current_rows, log_filepath)
 
-        print(f"★ 第 {gen} 代完成。最佳 Fitness: {true_best_fitness:.4f}")
-
-        # 【邏輯修正結束】
+        print(f"★ 第 {gen} 代完成。真實最佳 Fitness: {true_best_fitness:.4f}")
 
         # 更新族群以進行下一代
         pop_genes = next_pop_genes
         pop_sigmas = next_pop_sigmas
-        evaluated_results, unevaluated_tasks = [], []
 
         gc.collect()
+
     print("\n--- 演化過程已結束。 ---")
