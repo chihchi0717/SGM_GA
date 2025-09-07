@@ -489,7 +489,7 @@ async def main_async(args: argparse.Namespace):
             print("✅ Successfully closed existing TracePro process(es).")
         else:
             print("🟡 No existing TracePro processes found to close.")
-        time.sleep(2)
+        time.sleep(0.1)
     except Exception as e:
         print(f"⚠️ Could not execute taskkill command: {e}")
 

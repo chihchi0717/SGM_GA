@@ -5,3 +5,4 @@ pywinauto
 pandas
 scikit-learn
 openpyxl
+keyboard
