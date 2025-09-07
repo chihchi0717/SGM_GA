@@ -3,9 +3,9 @@ import numpy as np
 
 # === ES 參數 ===
 # μ: 父代數量
-POP_SIZE = 7
+POP_SIZE = 3
 # λ: 後代數量
-OFFSPRING_SIZE = 7 * POP_SIZE
+OFFSPRING_SIZE = 3 * POP_SIZE
 N_GENERATIONS = 100
 INITIAL_SIGMA_FACTOR = 0.15  # 初始 Sigma 與變數範圍的比例
 SIDE_BOUND = [0.6, 0.9]

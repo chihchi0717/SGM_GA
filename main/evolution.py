@@ -107,7 +107,7 @@ def predict_shrinkage_and_angle(design_params):
 def _calculate_summary_training_errors(
     model: ModelHuber, df: pd.DataFrame, target_name: str
 ) -> dict:
-    """Calculates summary error metrics (R2, RMSE, MAE) for a model on the training set."""
+    """計算模型在訓練集上的摘要誤差指標 (R2, RMSE, MAE)。"""
     y_true = df[target_name].to_numpy()
     y_pred = model.predict(df)
     return {
@@ -120,35 +120,64 @@ def _calculate_summary_training_errors(
 def _calculate_detailed_training_errors(
     model_s2: ModelHuber, model_s3: ModelHuber, model_ang: ModelHuber, df: pd.DataFrame
 ) -> pd.DataFrame:
-    """Calculates detailed prediction errors for each training data point."""
+    """為每個訓練資料點計算詳細的預測誤差，並加入使用者要求的欄位。"""
     df_details = df.copy()
+
     pred_delta_s2 = model_s2.predict(df_details)
     pred_delta_s3 = model_s3.predict(df_details)
     pred_dip_a3 = model_ang.predict(df_details)
 
     results_df = df_details[FEATURES].copy()
+
+    # --- S2 收縮率與長度誤差 ---
     results_df["Actual_delta_s2"] = df_details["delta_s2"]
     results_df["Predicted_delta_s2"] = pred_delta_s2
-    results_df["Error_delta_s2"] = pred_delta_s2 - df_details["delta_s2"]
-    # ... (add other columns as needed for detailed report)
+    results_df["Error_delta_s2"] = (
+        results_df["Predicted_delta_s2"] - results_df["Actual_delta_s2"]
+    )
+    # 2. 長度誤差 Error_s2
+    results_df["Error_s2"] = (
+        df_details["Design_s2(mm)"] * (1 - results_df["Predicted_delta_s2"])
+    ) - (df_details["Design_s2(mm)"] * (1 - results_df["Actual_delta_s2"]))
+
+    # --- S3 收縮率與長度誤差 (新增) ---
+    results_df["Actual_delta_s3"] = df_details["delta_s3"]
+    results_df["Predicted_delta_s3"] = pred_delta_s3
+    # 1. 收縮率誤差 Error_delta_s3
+    results_df["Error_delta_s3"] = (
+        results_df["Predicted_delta_s3"] - results_df["Actual_delta_s3"]
+    )
+    # 2. 長度誤差 Error_s3
+    results_df["Error_s3"] = (
+        df_details["Design_s3(mm)"] * (1 - results_df["Predicted_delta_s3"])
+    ) - (df_details["Design_s3(mm)"] * (1 - results_df["Actual_delta_s3"]))
+
+    # --- A3 角度誤差 (新增) ---
+    results_df["Actual_delta_a3"] = df_details["DIP_a3(deg)"]
+    results_df["Predicted_delta_a3"] = pred_dip_a3
+    # 3. 角度誤差 Error_delta_a3
+    results_df["Error_delta_a3"] = (
+        results_df["Predicted_delta_a3"] - results_df["Actual_delta_a3"]
+    )
+
     return results_df
 
 
 async def initialize_and_train_models(args: argparse.Namespace):
-    """Initializes and trains the three compensation models based on command-line arguments."""
+    """根據命令列參數初始化並訓練三個補償模型。"""
     global model_s2, model_s3, model_ang, USE_COMPENSATION_MODEL
 
     if args.no_compensation:
         USE_COMPENSATION_MODEL = False
-        print("\n🟡 Shrinkage compensation models are disabled.")
+        print("\n🟡 收縮補償模型已禁用。")
         return True, None, None
 
     USE_COMPENSATION_MODEL = True
-    print("\n--- Initializing and Training Compensation Models ---")
+    print("\n--- 正在初始化並訓練補償模型 ---")
     try:
         df_train = pd.read_excel(config.TRAIN_DATA_PATH)
     except Exception as e:
-        print(f"❌ Error reading training data: {e}")
+        print(f"❌ 讀取訓練資料時發生錯誤: {e}")
         USE_COMPENSATION_MODEL = False
         return False, None, None
 
@@ -172,7 +201,7 @@ async def initialize_and_train_models(args: argparse.Namespace):
         model_s2.fit(df_train, "delta_s2")
         model_s3.fit(df_train, "delta_s3")
         model_ang.fit(df_train, "DIP_a3(deg)")
-        print("\n✅ All models trained successfully.")
+        print("\n✅ 所有模型訓練成功。")
 
         summary_reports = {
             "model_s2": _calculate_summary_training_errors(
@@ -185,12 +214,14 @@ async def initialize_and_train_models(args: argparse.Namespace):
                 model_ang, df_train, "DIP_a3(deg)"
             ),
         }
+
         detailed_df = _calculate_detailed_training_errors(
             model_s2, model_s3, model_ang, df_train
         )
+
         return True, summary_reports, detailed_df
     except Exception as e:
-        print(f"❌ An error occurred during model training: {e}")
+        print(f"❌ 模型訓練過程中發生錯誤: {traceback.format_exc()}")
         USE_COMPENSATION_MODEL = False
         return False, None, None
 
@@ -267,6 +298,7 @@ def run_simulation(s1, s2, s3, a1, a2, a3, loop_num, individual):
     finally:
         os.chdir(original_cwd)
 
+
 # In evolution.py, replace the existing 'evaluate_individual' function with this one.
 
 
@@ -337,6 +369,7 @@ def evaluate_individual(individual_data, generation, parent_indices):
         angle_efficiencies_dict,  # Pass the dictionary, not the original list
         {"s2": s2, "s3": s3, "a3": a3},
     )
+
 
 # --- (新增) 純突變函式 ---
 def mutate_individual(parent_gene, parent_sigma, adaptation_mode):

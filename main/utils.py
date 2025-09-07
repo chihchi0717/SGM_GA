@@ -102,6 +102,7 @@ def save_generation_log(rows, filepath):
     except IOError as e:
         print(f"❌ Failed to save log file '{filepath}': {e}")
 
+
 # In utils.py, replace the 'resume_from_log' function with this new version.
 
 
