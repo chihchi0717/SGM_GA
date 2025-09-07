@@ -299,13 +299,10 @@ def run_simulation(s1, s2, s3, a1, a2, a3, loop_num, individual):
         os.chdir(original_cwd)
 
 
-# In evolution.py, replace the existing 'evaluate_individual' function with this one.
-
-
 def evaluate_individual(individual_data, generation, parent_indices):
     """
-    Evaluates a single individual by running the full simulation and fitness calculation pipeline.
-    This version is corrected to handle the return format from evaluate_fitness.
+    評估單一個體，運行完整的模擬與適應度計算流程。
+    【修改】: 此版本會額外回傳模型的預測收縮值與最終模擬幾何值。
     """
     loop_num, individual, _, _ = individual_data
     s2, s3, a3 = individual
@@ -319,9 +316,16 @@ def evaluate_individual(individual_data, generation, parent_indices):
     )
 
     sim_design = initial_design
+    prediction_info = {}
+
     if USE_COMPENSATION_MODEL:
         try:
             d_s2, d_s3, p_a3 = predict_shrinkage_and_angle(initial_design)
+            prediction_info = {
+                "pred_delta_s2": d_s2,
+                "pred_delta_s3": d_s3,
+                "pred_dip_a3": p_a3,
+            }
             sim_design = apply_geometric_constraints(
                 {
                     "Design_s2(mm)": initial_design["Design_s2(mm)"] * (1 - d_s2),
@@ -330,9 +334,19 @@ def evaluate_individual(individual_data, generation, parent_indices):
                 }
             )
         except Exception as e:
-            print(
-                f"⚠️ Model prediction failed: {e}. Using original design for simulation."
-            )
+            print(f"⚠️ 模型預測失敗: {e}。將使用原始設計進行模擬。")
+            prediction_info = {
+                "pred_delta_s2": 0,
+                "pred_delta_s3": 0,
+                "pred_dip_a3": a3,
+            }
+
+    # 捕獲將要用於模擬的最終幾何尺寸
+    sim_geometry_info = {
+        "predicted_s2": sim_design["Design_s2(mm)"],
+        "predicted_s3": sim_design["Design_s3(mm)"],
+        "predicted_a3": sim_design["Design_a3(deg)"],
+    }
 
     sim_result = run_simulation(
         sim_design["Design_s1(mm)"],
@@ -348,26 +362,25 @@ def evaluate_individual(individual_data, generation, parent_indices):
     if sim_result is None:
         return None
 
-    # --- FIX APPLIED HERE ---
-    # Robustly unpack the result from evaluate_fitness, which returns a tuple/list.
-    fitness = sim_result[0] if len(sim_result) > 0 else -9999.0
-    efficiency = sim_result[1] if len(sim_result) > 1 else 0.0
-    process_score = sim_result[2] if len(sim_result) > 2 else 0.0
-    angle_eff_list = sim_result[3] if len(sim_result) > 3 else []
-
-    # Convert the list of efficiencies into a dictionary that create_log_row expects.
-    # The angles range from 10 to 90 degrees in steps of 10.
+    fitness, efficiency, process_score, angle_eff_list = (
+        sim_result[0],
+        sim_result[1],
+        sim_result[2],
+        sim_result[3] if len(sim_result) > 3 else [],
+    )
     angle_efficiencies_dict = {
         angle: eff for angle, eff in zip(range(10, 91, 10), angle_eff_list)
     }
 
-    # Return the standardized 5-tuple with the corrected dictionary format.
+    # 【修改】回傳的元組現在包含 7 個元素
     return (
         fitness,
         efficiency,
         process_score,
-        angle_efficiencies_dict,  # Pass the dictionary, not the original list
+        angle_efficiencies_dict,
         {"s2": s2, "s3": s3, "a3": a3},
+        prediction_info,
+        sim_geometry_info,  # 新增第 7 個元素
     )
 
 
@@ -397,54 +410,45 @@ def mutate_individual(parent_gene, parent_sigma, adaptation_mode):
     return child_genes, child_sigmas
 
 
-def apply_diversity_penalty(genes_array, original_fitness_list):
+def apply_diversity_penalty(
+    genes_array: np.ndarray, original_fitness_list: list
+) -> list:
     """
-    對擁擠區域的個體施加 fitness 懲罰，以維持族群多樣性。
+    根據基因的相似度對 fitness 進行懲罰，以維持族群多樣性。
     """
     num_individuals = len(genes_array)
     if num_individuals <= 1:
         return original_fitness_list
 
-    # 1. 特徵標準化：由於 s2/s3 和 a3 的尺度差異很大，需要標準化後再計算距離
-    # 複製以避免修改原始數據
+    # 1. 特徵標準化
     normalized_genes = np.copy(genes_array).astype(float)
-    # 對每一列 (特徵) 進行最小-最大標準化 (縮放到 0-1 區間)
     min_vals = np.min(normalized_genes, axis=0)
     max_vals = np.max(normalized_genes, axis=0)
     range_vals = max_vals - min_vals
-    # 避免除以零
     range_vals[range_vals == 0] = 1.0
     normalized_genes = (normalized_genes - min_vals) / range_vals
 
-    # 2. 計算距離矩陣和相似度
+    # 2. 計算距離矩陣
     distances = np.zeros((num_individuals, num_individuals))
     for i in range(num_individuals):
         for j in range(i + 1, num_individuals):
-            # 計算標準化後的歐幾里得距離
             dist = np.linalg.norm(normalized_genes[i] - normalized_genes[j])
             distances[i, j] = distances[j, i] = dist
 
-    # 計算每個個體的平均距離
     avg_distances = np.mean(distances, axis=1)
 
     # 3. 計算懲罰並應用
     adjusted_fitness = []
-    # 找到族群中的最大平均距離，作為比較的基準
     max_avg_dist = np.max(avg_distances) if np.max(avg_distances) > 0 else 1.0
-
     for i in range(num_individuals):
-        # 將平均距離正規化為一個 "獨特性分數" (0到1之間，越高表示越獨特)
         uniqueness_score = avg_distances[i] / max_avg_dist
-
-        # 懲罰與 (1 - uniqueness_score) 成正比，越擁擠 (分數越低)，懲罰越重
         penalty = (1.0 - uniqueness_score) * config.DIVERSITY_PENALTY_FACTOR
 
-        # 從原始 fitness 中扣除懲罰比例
-        # 只對正值的 fitness 施加懲罰
+        # 只對正值的 fitness 進行懲罰
         if original_fitness_list[i] > 0:
             final_fitness = original_fitness_list[i] * (1.0 - penalty)
         else:
-            final_fitness = original_fitness_list[i]
+            final_fitness = original_fitness_list[i]  # 負值 fitness 不變
 
         adjusted_fitness.append(final_fitness)
 
@@ -621,25 +625,39 @@ async def main_async(args: argparse.Namespace):
                 print("❌ (μ,λ)策略下沒有任何子代存活，演化終止。")
                 break
 
-        # 5. 排序並選出下一代父代 (μ)
-        fitness_all = [d[0] for d in combined_eval]
+        # 1. 從合併後的族群中，提取出「原始的、未經修改的」fitness 列表
+        original_fitness_all = [d[0] for d in combined_eval]
 
+        # 2. **立即計算真實的最佳 fitness**，這個值將用於報告和檔名
+        true_best_fitness = max(original_fitness_all, default=-9999)
+
+        # 3. 準備一個「用於選擇」的 fitness 列表，它可能會被後續步驟修改
+        fitness_for_selection = original_fitness_all
+
+        # 4. 如果啟用多樣性控制，則計算調整後的 fitness，並用它來排序
         if args.diversity_control:
-            print("--- 正在應用多樣性懲罰機制 ---")
-            fitness_all = apply_diversity_penalty(combined_genes, fitness_all)
-            # 將調整後的 fitness 更新回 combined_eval 以便日誌記錄
-            for i, res in enumerate(combined_eval):
-                # res 是一個元組，我們不能直接修改它，所以創建一個新的列表
-                eval_list = list(res)
-                eval_list[0] = fitness_all[i]
-                combined_eval[i] = tuple(eval_list)
-        order = np.argsort(fitness_all)[::-1]
+            print("--- 正在應用多樣性懲罰 ---")
+            # 準備用於計算距離的基因
+            if args.selection_strategy == "plus":
+                genes_for_diversity = np.vstack([pop_genes] + successful_children_genes)
+            else:  # comma strategy
+                genes_for_diversity = np.array(successful_children_genes)
 
+            # 使用調整後的 fitness 來進行選擇
+            fitness_for_selection = apply_diversity_penalty(
+                genes_for_diversity, original_fitness_all
+            )
+
+        # 5. **使用「用於選擇的 fitness」進行排序**，以決定誰能存活
+        order = np.argsort(fitness_for_selection)[::-1]
+
+        # 6. 根據排序結果，選出下一代父代
         survivor_indices = order[: config.POP_SIZE]
-
         next_pop_genes = np.array([combined_genes[i] for i in survivor_indices])
         next_pop_sigmas = np.array([combined_sigmas[i] for i in survivor_indices])
-        next_pop_eval = [combined_eval[i] for i in survivor_indices]
+        next_pop_eval = [
+            combined_eval[i] for i in survivor_indices
+        ]  # 存活者的評估結果仍然是原始的
 
         # 6. 記錄日誌
         current_rows = []
@@ -680,18 +698,19 @@ async def main_async(args: argparse.Namespace):
                 )
             )
 
-        best_fitness = max(fitness_all, default=-9999)
-        out_filename = f"fitness_gen{gen}_max{best_fitness:.2f}.csv"
+        # 8. **使用第 2 步計算的「真實最佳 fitness」來生成檔名和輸出訊息**
+        out_filename = f"fitness_gen{gen}_max{true_best_fitness:.2f}.csv"
         log_filepath = os.path.join(config.LOG_DIR, out_filename)
         utils.save_generation_log(current_rows, log_filepath)
 
-        print(f"★ 第 {gen} 代完成。最佳 Fitness: {best_fitness:.4f}")
+        print(f"★ 第 {gen} 代完成。最佳 Fitness: {true_best_fitness:.4f}")
+
+        # 【邏輯修正結束】
 
         # 更新族群以進行下一代
         pop_genes = next_pop_genes
         pop_sigmas = next_pop_sigmas
-        evaluated_results, unevaluated_tasks = [], []  # 清空，為下一代做準備
+        evaluated_results, unevaluated_tasks = [], []
 
         gc.collect()
-
     print("\n--- 演化過程已結束。 ---")

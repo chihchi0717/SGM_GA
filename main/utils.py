@@ -67,8 +67,31 @@ def setup_keyboard_hooks():
 
 
 def create_log_row(genes, sigmas, eval_result, gen, role, parent_indices):
-    """Creates a single, standardized log row as a dictionary."""
-    fitness, efficiency, process_score, angle_efficiencies, _ = eval_result
+    """
+    創建一個標準化的日誌行 (字典)。
+    【修改】: 新增了 Predicted_S2, Predicted_S3, Predicted_A3 欄位。
+    """
+    # 【修改】解包 eval_result，使其能處理 5, 6, 7 個元素，確保相容性
+    if len(eval_result) == 7:
+        (
+            fitness,
+            efficiency,
+            process_score,
+            angle_efficiencies,
+            _,
+            prediction_info,
+            sim_geometry_info,
+        ) = eval_result
+    elif len(eval_result) == 6:
+        fitness, efficiency, process_score, angle_efficiencies, _, prediction_info = (
+            eval_result
+        )
+        sim_geometry_info = {}
+    else:
+        fitness, efficiency, process_score, angle_efficiencies, _ = eval_result
+        prediction_info = {}
+        sim_geometry_info = {}
+
     row = {
         "generation": gen,
         "role": role,
@@ -77,15 +100,26 @@ def create_log_row(genes, sigmas, eval_result, gen, role, parent_indices):
         "fitness": f"{fitness:.4f}",
         "efficiency": f"{efficiency:.4f}",
         "process_score": f"{process_score:.4f}",
-        "S2": f"{genes[0]:.4f}",
-        "S3": f"{genes[1]:.4f}",
-        "A3": f"{genes[2]:.4f}",
+        # 設計值 (演算法決定的基因值)
+        "Design_S2": f"{genes[0]:.4f}",
+        "Design_S3": f"{genes[1]:.4f}",
+        "Design_A3": f"{genes[2]:.4f}",
+        # 預測收縮/變化率 (由補償模型預測)
+        "Pred_delta_s2": f"{prediction_info.get('pred_delta_s2', 0.0):.6f}",
+        "Pred_delta_s3": f"{prediction_info.get('pred_delta_s3', 0.0):.6f}",
+        # "Pred_dip_a3": f"{prediction_info.get('pred_dip_a3', 0.0):.4f}",
+        # 預測幾何值 (最終用於模擬的值)
+        "Predicted_S2": f"{sim_geometry_info.get('predicted_s2', 0.0):.4f}",
+        "Predicted_S3": f"{sim_geometry_info.get('predicted_s3', 0.0):.4f}",
+        "Predicted_A3": f"{sim_geometry_info.get('predicted_a3', 0.0):.4f}",
+        # Sigma 值
         "sigma1": f"{sigmas[0]:.6f}",
         "sigma2": f"{sigmas[1]:.6f}",
         "sigma3": f"{sigmas[2]:.6f}",
     }
-    for angle, eff in angle_efficiencies.items():
-        row[f"eff_{angle}"] = f"{eff:.4f}"
+    if angle_efficiencies:
+        for angle, eff in angle_efficiencies.items():
+            row[f"eff_{angle}"] = f"{eff:.4f}"
     return row
 
 
