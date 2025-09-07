@@ -2,13 +2,13 @@ import asyncio
 import argparse
 import traceback
 
-# 鍵盤模組為選用
+# The keyboard module is optional
 try:
     import keyboard
 except ImportError:
     keyboard = None
 
-# 從我們的模組中匯入核心功能
+# Import core functionalities from our modules
 import config
 from evolution import main_async
 from utils import (
@@ -19,104 +19,112 @@ from utils import (
 )
 
 if __name__ == "__main__":
-    # 設定命令列參數解析器
-    parser = argparse.ArgumentParser(description="演化策略優化器")
+    # Set up the command-line argument parser
+    parser = argparse.ArgumentParser(description="Evolutionary Strategy Optimizer")
 
-    # --- 模型與特徵設定 ---
-    model_group = parser.add_argument_group("模型與特徵設定")
-    model_group.add_argument(
-        "--model-type",
+    # --- (新增) 演化策略設定 ---
+    es_group = parser.add_argument_group("演化策略 (ES) 設定")
+    es_group.add_argument(
+        "--selection-strategy",
         type=str,
-        default=config.MODEL_TYPE,
-        choices=["Huber", "RF", "OLS"],
-        help=f"選擇要使用的模型類型 (預設: {config.MODEL_TYPE})",
+        default=config.SELECTION_STRATEGY,
+        choices=["plus", "comma"],
+        help=f"選擇策略: 'plus'=(μ+λ), 'comma'=(μ,λ) (預設: {config.SELECTION_STRATEGY})",
     )
+    es_group.add_argument(
+        "--mutation-adaptation",
+        type=str,
+        default=config.MUTATION_ADAPTATION,
+        choices=["adaptive", "fixed"],
+        help=f"突變強度: 'adaptive'=適應性, 'fixed'=固定 (預設: {config.MUTATION_ADAPTATION})",
+    )
+    es_group.add_argument(
+        "--diversity-control",
+        action=argparse.BooleanOptionalAction,
+        default=config.USE_DIVERSITY_CONTROL,
+        help="啟用或禁用族群多樣性懲罰機制",
+    )
+    # --- Model and Feature Settings ---
+    model_group = parser.add_argument_group("Model and Feature Settings")
     model_group.add_argument(
         "--add-ratios",
-        action=argparse.BooleanOptionalAction,
-        default=config.ADD_RATIOS,
-        help="加入邊長比例特徵",
+        action="store_true",
+        help="Add side length ratio features",
     )
     model_group.add_argument(
         "--add-sincos",
-        action=argparse.BooleanOptionalAction,
-        default=config.ADD_SINCOS,
-        help="加入角度的 sin/cos 特徵",
+        action="store_true",
+        help="Add sin/cos features for angles",
     )
     model_group.add_argument(
         "--add-interactions",
-        action=argparse.BooleanOptionalAction,
-        default=config.ADD_INTERACTIONS,
-        help="啟用 s*s, s*a 交互作用",
+        dest="add_interactions",
+        action="store_true",
+        default=True,
+        help="Enable side-side and side-angle interactions (s*s, s*a)",
     )
     model_group.add_argument(
         "--add-aa-interact",
-        action=argparse.BooleanOptionalAction,
-        default=config.ADD_AA_INTERACT,
-        help="啟用 a*a 交互作用",
+        dest="add_aa_interact",
+        action="store_true",
+        default=True,
+        help="Enable angle-angle interactions (a*a)",
     )
 
-    # --- 資料與訓練設定 ---
-    training_group = parser.add_argument_group("資料與訓練設定")
-    training_group.add_argument(
-        "--average",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="是否對相同結構的樣本進行平均",
-    )
+    # --- Data and Training Settings ---
+    training_group = parser.add_argument_group("Data and Training Settings")
     training_group.add_argument(
         "--scale-length",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="是否對長度模型的特徵進行縮放",
+        help="Scale features for the length model",
     )
     training_group.add_argument(
         "--scale-angle",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="是否對角度模型的特徵進行縮放",
+        help="Scale features for the angle model",
     )
 
-    # --- 功能與流程控制 ---
-    control_group = parser.add_argument_group("功能與流程控制")
+    # --- Functionality and Flow Control ---
+    control_group = parser.add_argument_group("Functionality and Flow Control")
     control_group.add_argument(
         "--save-report",
         type=str,
         metavar="FILENAME",
-        help="將模型係數與訓練誤差儲存至 Excel",
+        help="Save model coefficients and training errors to Excel",
     )
     control_group.add_argument(
-        "--save-plots",
+        "--report-only",
         action="store_true",
-        help="在儲存報告時，同時產生並儲存誤差分析圖表",
+        help="Only save the report, do not run optimization",
     )
     control_group.add_argument(
-        "--report-only", action="store_true", help="僅儲存報告，不執行優化"
-    )
-    control_group.add_argument(
-        "--no-compensation", action="store_true", help="禁用收縮補償模型"
+        "--no-compensation",
+        action="store_true",
+        help="Disable the shrinkage compensation model",
     )
 
     cli_args = parser.parse_args()
 
-    # 如果安裝了 keyboard 模組，就設定快速鍵
+    # If the keyboard module is installed, set up the hotkeys
     if keyboard:
         setup_keyboard_hooks()
     else:
         print(
-            "\n⚠️  未安裝 'keyboard' 模組，無法使用快速鍵停止。請執行 'pip install keyboard'。"
+            "\n⚠️ 'keyboard' module not installed, hotkeys are disabled. Run 'pip install keyboard'."
         )
 
     try:
         asyncio.run(main_async(cli_args))
     except KeyboardInterrupt:
-        print("\n🛑 偵測到 Ctrl+C，正在準備立即停止...")
+        print("\n🛑 Ctrl+C detected, preparing for immediate stop...")
         immediate_stop_event.set()
         graceful_stop_event.set()
     except Exception as e:
-        subject = "演化策略主程式發生致命錯誤"
-        body = f"錯誤類型: {type(e).__name__}\n錯誤訊息: {e}\n\n追蹤訊息:\n{traceback.format_exc()}"
+        subject = "A fatal error occurred in the main Evolutionary Strategy program"
+        body = f"Error Type: {type(e).__name__}\nError Message: {e}\n\nTraceback:\n{traceback.format_exc()}"
         print(f"❌ {subject}")
         send_error(subject, body)
     finally:
-        print("\n程式已結束。")
+        print("\nProgram has finished.")

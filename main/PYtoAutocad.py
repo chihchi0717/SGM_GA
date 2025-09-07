@@ -411,9 +411,9 @@ class PrismBuilder:
         else:
             raise ValueError("mode must be 'stair' or 'triangle'")
 
-        actual_array_top = (rows - 1) * (
+        actual_array_top = top + (rows - 1) * (
             top - bottom
-        )  # top + (rows - 1) * (top - bottom)
+        )  # (rows - 1) * (top - bottom)
         array_center_y = (actual_array_top) / 2  # (actual_array_top) / 2  # + bottom
         center_y = round(array_center_y * self.scale, 1)
         center_x = 0  # round(Cx * self.scale + 1, 1)
@@ -460,9 +460,9 @@ def Build_model(
     mode: str = "triangle",
     folder: str = ".",
     fillet: int = 2,
-    radius_vertex: float = 0.022,
-    radius_inside: float = 0.088,
-    light_source_length: float = 0.5,
+    radius_vertex: float = 0.034,
+    radius_inside: float = 0.053,
+    light_source_length: float = 1,
     builder_params: dict | None = None,
     substrate: float = 0.6,
 ):

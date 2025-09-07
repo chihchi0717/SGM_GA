@@ -97,13 +97,13 @@ def tracepro_fast(path_macro, timeout=60, exe_path=None):
         # 如果到這裡代表超時
         print("⏰ 模擬超時，執行 Reset.scm 並重試")
         load_macro(app, reset_path)
-        time.sleep(1)
+        time.sleep(0.1)
         safe_click(win["開啟(&O)Button"])
         # 清掉重試前可能殘留的 signal
         # if os.path.exists(signal):
         #     os.remove(signal)
         # 休息一下再重試（可依需要調整）
-        time.sleep(1)
+        time.sleep(0.1)
     # 執行主 macro
     # load_macro(app, path_macro)
     # start_time = time.time()
