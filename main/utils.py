@@ -144,10 +144,10 @@ def resume_from_log():
         os.makedirs(log_dir, exist_ok=True)
         log_files = [f for f in os.listdir(log_dir) if f.startswith("fitness_gen")]
     except FileNotFoundError:
-        return 1, None, None, [], []
+        return 1, None, None, None, []
 
     if not log_files:
-        return 1, None, None, [], []
+        return 1, None, None, None, []
 
     latest_gen_num = 0
     latest_file = ""
@@ -158,7 +158,7 @@ def resume_from_log():
             latest_file = f
 
     if not latest_file:
-        return 1, None, None, [], []
+        return 1, None, None, None, []
 
     latest_filepath = os.path.join(log_dir, latest_file)
     try:
@@ -173,7 +173,7 @@ def resume_from_log():
             gene_columns = ["S2", "S3", "A3"]
         elif not all(col in df.columns for col in gene_columns):
             print(f"⚠️ 日誌檔案 '{latest_file}' 缺少必要的基因欄位。將從頭開始。")
-            return 1, None, None, [], []
+            return 1, None, None, None, []
 
         if is_complete:
             print(
@@ -187,7 +187,18 @@ def resume_from_log():
                 dtype=float
             )
 
-            return start_gen, pop_genes, pop_sigmas, [], []
+            parent_eval = [
+                (
+                    safe_float(r["fitness"]),
+                    safe_float(r["efficiency"]),
+                    safe_float(r["process_score"]),
+                    {},
+                    0.0,
+                )
+                for _, r in final_parents.iterrows()
+            ]
+
+            return start_gen, pop_genes, pop_sigmas, parent_eval, []
         else:
             # 簡化恢復邏輯：如果世代未完成，則從該世代的初始父代重新開始
             print(f"🔁 偵測到未完成的第 {latest_gen_num} 代，將從此代重新開始評估。")
@@ -198,19 +209,19 @@ def resume_from_log():
                 print(
                     f"⚠️ 第 {start_gen} 代日誌損毀 (找不到 'parent_old' 資訊)，將從頭開始。"
                 )
-                return 1, None, None, [], []
+                return 1, None, None, None, []
 
             pop_genes = parent_old_df[gene_columns].to_numpy(dtype=float)
             pop_sigmas = parent_old_df[["sigma1", "sigma2", "sigma3"]].to_numpy(
                 dtype=float
             )
 
-            # 返回空列表，觸發對該世代的重新評估
-            return start_gen, pop_genes, pop_sigmas, [], []
+            # 返回 None，觸發對該世代的重新評估
+            return start_gen, pop_genes, pop_sigmas, None, []
 
     except Exception as e:
         print(f"❌ 讀取日誌檔案 '{latest_filepath}' 時發生錯誤: {e}。將從頭開始。")
-        return 1, None, None, [], []
+        return 1, None, None, None, []
 
 
 def send_error(subject, body=""):

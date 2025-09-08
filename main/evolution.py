@@ -487,7 +487,7 @@ async def main_async(args: argparse.Namespace):
     utils.set_output_dir(output_dir)
     os.makedirs(config.LOG_DIR, exist_ok=True)
 
-    start_gen, pop_genes, pop_sigmas, _, _ = utils.resume_from_log()
+    start_gen, pop_genes, pop_sigmas, prev_parent_eval, _ = utils.resume_from_log()
 
     if start_gen == 1:
         pop_genes = np.random.rand(config.POP_SIZE, config.N_VARS)
@@ -512,35 +512,43 @@ async def main_async(args: argparse.Namespace):
         print(f"\n--- 第 {gen}/{config.N_GENERATIONS} 代 ---")
 
         # 1. 評估父代，並只保留成功的個體
-        parent_eval = []
-        successful_parent_genes = np.array([])
-        successful_parent_sigmas = np.array([])
+        if prev_parent_eval is not None:
+            print("跳過父代評估，直接沿用上一代結果。")
+            parent_eval = prev_parent_eval
+            successful_parent_genes = pop_genes
+            successful_parent_sigmas = pop_sigmas
+        else:
+            parent_eval = []
+            successful_parent_genes = np.array([])
+            successful_parent_sigmas = np.array([])
 
-        with ThreadPoolExecutor(max_workers=config.MAX_WORKERS) as executor:
-            future_to_idx = {
-                executor.submit(
-                    evaluate_individual,
-                    (i + 1, pop_genes[i], pop_sigmas[i], "parent_old"),
-                    gen,
-                    (-1, -1),
-                ): i
-                for i in range(len(pop_genes))
-            }
+            with ThreadPoolExecutor(max_workers=config.MAX_WORKERS) as executor:
+                future_to_idx = {
+                    executor.submit(
+                        evaluate_individual,
+                        (i + 1, pop_genes[i], pop_sigmas[i], "parent_old"),
+                        gen,
+                        (-1, -1),
+                    ): i
+                    for i in range(len(pop_genes))
+                }
 
-            eval_map = {}
-            for future in future_to_idx:
-                try:
-                    result = future.result()
-                    if result:
-                        eval_map[future_to_idx[future]] = result
-                except Exception as exc:
-                    print(f"個體評估產生例外: {exc}")
+                eval_map = {}
+                for future in future_to_idx:
+                    try:
+                        result = future.result()
+                        if result:
+                            eval_map[future_to_idx[future]] = result
+                    except Exception as exc:
+                        print(f"個體評估產生例外: {exc}")
 
-            successful_indices = sorted(eval_map.keys())
-            if successful_indices:
-                parent_eval = [eval_map[i] for i in successful_indices]
-                successful_parent_genes = pop_genes[successful_indices]
-                successful_parent_sigmas = pop_sigmas[successful_indices]
+                successful_indices = sorted(eval_map.keys())
+                if successful_indices:
+                    parent_eval = [eval_map[i] for i in successful_indices]
+                    successful_parent_genes = pop_genes[successful_indices]
+                    successful_parent_sigmas = pop_sigmas[successful_indices]
+
+        prev_parent_eval = None
 
         if len(successful_parent_genes) == 0:
             print(f"❌ 第 {gen} 代所有父代均評估失敗，無法產生子代。演化終止。")
@@ -675,6 +683,7 @@ async def main_async(args: argparse.Namespace):
         # 更新族群以進行下一代
         pop_genes = next_pop_genes
         pop_sigmas = next_pop_sigmas
+        prev_parent_eval = next_pop_eval
 
         gc.collect()
 
