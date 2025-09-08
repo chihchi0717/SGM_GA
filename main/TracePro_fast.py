@@ -86,7 +86,7 @@ def tracepro_fast(path_macro, timeout=60, exe_path=None):
         time.sleep(0.1)
         win.menu_select("&Analysis->Candela Plots->Rectangular Candela Distribution")
         time.sleep(0.1)
-        print("▶️ 執行模擬 macro:", os.path.basename(path_macro))
+        #print("▶️ 執行模擬 macro:", os.path.basename(path_macro))
         load_macro(app, path_macro)
 
         if wait_file(signal, timeout=timeout):

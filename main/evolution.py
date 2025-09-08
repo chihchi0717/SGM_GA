@@ -482,17 +482,6 @@ async def main_async(args: argparse.Namespace):
         print("\n--- '--report-only' mode, execution finished. ---")
         return
 
-    print("\n--- Attempting to close any existing TracePro instances... ---")
-    try:
-        result = os.system("taskkill /F /IM TracePro.exe >nul 2>&1")
-        if result == 0:
-            print("✅ Successfully closed existing TracePro process(es).")
-        else:
-            print("🟡 No existing TracePro processes found to close.")
-        time.sleep(0.1)
-    except Exception as e:
-        print(f"⚠️ Could not execute taskkill command: {e}")
-
     output_dir = os.path.join(BASE_DIR, "GA_population")
     os.makedirs(output_dir, exist_ok=True)
     utils.set_output_dir(output_dir)

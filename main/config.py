@@ -3,9 +3,9 @@ import numpy as np
 
 # === ES 參數 ===
 # μ: 父代數量
-POP_SIZE = 7
+POP_SIZE = 4
 # λ: 後代數量
-OFFSPRING_SIZE = 7 * POP_SIZE
+OFFSPRING_SIZE = 1 * POP_SIZE
 N_GENERATIONS = 100
 INITIAL_SIGMA_FACTOR = 0.15  # 初始 Sigma 與變數範圍的比例
 SIDE_BOUND = [0.6, 0.9]
@@ -17,7 +17,7 @@ MUTATION_ADAPTATION = "adaptive"
 
 # === (新增) 多樣性控制 ===
 # 是否啟用懲罰機制以避免過早收斂
-USE_DIVERSITY_CONTROL = True
+USE_DIVERSITY_CONTROL = False
 # 懲罰強度因子。數值越大，對相似個體的懲罰越重。建議範圍: 0.05 ~ 0.5
 DIVERSITY_PENALTY_FACTOR = 0.15
 

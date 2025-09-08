@@ -17,8 +17,8 @@ def main():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     # output_dir = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\MOO_best_PS_OM[0.9, 0.9, 30]\SIM"
     # folder = os.path.join(output_dir, "[0.9, 0.9, 30]_N1.3_F2_5_3_sub0.6)_allele")
-    output_dir = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\Optimize_Regression\[0.45, 0.57, 79.91]\SIM_fillet"
-    folder = os.path.join(output_dir, "[0.45, 0.57, 79.91]_N1.2536_F2_53_34_sub0.6")
+    output_dir = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\Optimize_Regression\[0.45, 0.57, 79.91]\SIM"
+    folder = os.path.join(output_dir, "[0.45, 0.57, 79.91]_N1.2536_F0_sub0.6")
     os.makedirs(folder, exist_ok=True)
 
     # Copy simulation macro
@@ -30,7 +30,7 @@ def main():
         sid_ang,
         mode="triangle",
         folder=folder,
-        fillet=2,
+        fillet=0,
         light_source_length=1,
         radius_inside=0.053,
         radius_vertex=0.034,

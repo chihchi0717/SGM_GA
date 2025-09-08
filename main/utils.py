@@ -166,37 +166,45 @@ def resume_from_log():
         is_complete = "parent" in df["role"].values
 
         # 【邏輯修正】: 定義正確的基因欄位名稱
-        gene_columns = ['Design_S2', 'Design_S3', 'Design_A3']
-        
+        gene_columns = ["Design_S2", "Design_S3", "Design_A3"]
+
         # 處理欄位可能不存在的舊格式日誌
-        if 'S2' in df.columns and 'Design_S2' not in df.columns:
-            gene_columns = ['S2', 'S3', 'A3']
+        if "S2" in df.columns and "Design_S2" not in df.columns:
+            gene_columns = ["S2", "S3", "A3"]
         elif not all(col in df.columns for col in gene_columns):
-             print(f"⚠️ 日誌檔案 '{latest_file}' 缺少必要的基因欄位。將從頭開始。")
-             return 1, None, None, [], []
+            print(f"⚠️ 日誌檔案 '{latest_file}' 缺少必要的基因欄位。將從頭開始。")
+            return 1, None, None, [], []
 
         if is_complete:
-            print(f"✅ 第 {latest_gen_num} 代已完成。將從新的第 {latest_gen_num + 1} 代開始。")
+            print(
+                f"✅ 第 {latest_gen_num} 代已完成。將從新的第 {latest_gen_num + 1} 代開始。"
+            )
             start_gen = latest_gen_num + 1
             final_parents = df[df["role"] == "parent"]
-            
+
             pop_genes = final_parents[gene_columns].to_numpy(dtype=float)
-            pop_sigmas = final_parents[["sigma1", "sigma2", "sigma3"]].to_numpy(dtype=float)
-            
+            pop_sigmas = final_parents[["sigma1", "sigma2", "sigma3"]].to_numpy(
+                dtype=float
+            )
+
             return start_gen, pop_genes, pop_sigmas, [], []
         else:
             # 簡化恢復邏輯：如果世代未完成，則從該世代的初始父代重新開始
             print(f"🔁 偵測到未完成的第 {latest_gen_num} 代，將從此代重新開始評估。")
             start_gen = latest_gen_num
-            
+
             parent_old_df = df[df["role"] == "parent_old"]
             if parent_old_df.empty:
-                print(f"⚠️ 第 {start_gen} 代日誌損毀 (找不到 'parent_old' 資訊)，將從頭開始。")
+                print(
+                    f"⚠️ 第 {start_gen} 代日誌損毀 (找不到 'parent_old' 資訊)，將從頭開始。"
+                )
                 return 1, None, None, [], []
 
             pop_genes = parent_old_df[gene_columns].to_numpy(dtype=float)
-            pop_sigmas = parent_old_df[["sigma1", "sigma2", "sigma3"]].to_numpy(dtype=float)
-            
+            pop_sigmas = parent_old_df[["sigma1", "sigma2", "sigma3"]].to_numpy(
+                dtype=float
+            )
+
             # 返回空列表，觸發對該世代的重新評估
             return start_gen, pop_genes, pop_sigmas, [], []
 
