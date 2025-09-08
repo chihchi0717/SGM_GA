@@ -41,6 +41,8 @@ USE_COMPENSATION_MODEL = True
 # Thread locks
 autocad_lock = threading.Lock()
 tracepro_lock = threading.Lock()
+evaluation_cache_lock = threading.Lock()
+evaluation_cache = {}
 
 
 def copy_scm_to_all_folders(save_root):
@@ -307,6 +309,13 @@ def evaluate_individual(individual_data, generation, parent_indices):
     loop_num, individual, _, _ = individual_data
     s2, s3, a3 = individual
 
+    gene_key = tuple(round(v, 4) for v in individual)
+    with evaluation_cache_lock:
+        cached_result = evaluation_cache.get(gene_key)
+    if cached_result is not None:
+        print(f"參數 {gene_key} 已評估，直接複製紀錄。")
+        return cached_result
+
     initial_design = apply_geometric_constraints(
         {
             "Design_s2(mm)": s2,
@@ -372,16 +381,18 @@ def evaluate_individual(individual_data, generation, parent_indices):
         angle: eff for angle, eff in zip(range(10, 91, 10), angle_eff_list)
     }
 
-    # 【修改】回傳的元組現在包含 7 個元素
-    return (
+    eval_result = (
         fitness,
         efficiency,
         process_score,
         angle_efficiencies_dict,
         {"s2": s2, "s3": s3, "a3": a3},
         prediction_info,
-        sim_geometry_info,  # 新增第 7 個元素
+        sim_geometry_info,
     )
+    with evaluation_cache_lock:
+        evaluation_cache[gene_key] = eval_result
+    return eval_result
 
 
 # --- (新增) 純突變函式 ---
@@ -487,7 +498,8 @@ async def main_async(args: argparse.Namespace):
     utils.set_output_dir(output_dir)
     os.makedirs(config.LOG_DIR, exist_ok=True)
 
-    start_gen, pop_genes, pop_sigmas, prev_parent_eval, _ = utils.resume_from_log()
+    global evaluation_cache
+    start_gen, pop_genes, pop_sigmas, prev_parent_eval, evaluation_cache = utils.resume_from_log()
 
     if start_gen == 1:
         pop_genes = np.random.rand(config.POP_SIZE, config.N_VARS)
