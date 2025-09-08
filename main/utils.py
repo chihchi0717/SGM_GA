@@ -140,14 +140,59 @@ def save_generation_log(rows, filepath):
 # In utils.py, replace the 'resume_from_log' function with this new version.
 def resume_from_log():
     log_dir = config.LOG_DIR
+    evaluation_cache = {}
+
     try:
         os.makedirs(log_dir, exist_ok=True)
         log_files = [f for f in os.listdir(log_dir) if f.startswith("fitness_gen")]
     except FileNotFoundError:
-        return 1, None, None, None, []
+        return 1, None, None, None, evaluation_cache
 
     if not log_files:
-        return 1, None, None, None, []
+        return 1, None, None, None, evaluation_cache
+
+    # 先建立所有歷史評估的快取
+    for f in log_files:
+        filepath = os.path.join(log_dir, f)
+        try:
+            df_all = pd.read_csv(filepath)
+        except Exception:
+            continue
+
+        gene_cols = ["Design_S2", "Design_S3", "Design_A3"]
+        if "S2" in df_all.columns and "Design_S2" not in df_all.columns:
+            gene_cols = ["S2", "S3", "A3"]
+        elif not all(col in df_all.columns for col in gene_cols):
+            continue
+
+        angle_cols = [c for c in df_all.columns if c.startswith("eff_")]
+        for _, r in df_all.iterrows():
+            key = tuple(round(safe_float(r[c]), 4) for c in gene_cols)
+            angle_dict = {
+                int(col.split("_")[1]): safe_float(r[col])
+                for col in angle_cols
+                if not pd.isna(r[col])
+            }
+            prediction_info = {
+                "pred_delta_s2": safe_float(r.get("Pred_delta_s2")),
+                "pred_delta_s3": safe_float(r.get("Pred_delta_s3")),
+                # 角度補償可能未記錄，缺值視為 0
+                "pred_dip_a3": safe_float(r.get("Pred_dip_a3")),
+            }
+            sim_geometry_info = {
+                "predicted_s2": safe_float(r.get("Predicted_S2")),
+                "predicted_s3": safe_float(r.get("Predicted_S3")),
+                "predicted_a3": safe_float(r.get("Predicted_A3")),
+            }
+            evaluation_cache[key] = (
+                safe_float(r.get("fitness")),
+                safe_float(r.get("efficiency")),
+                safe_float(r.get("process_score")),
+                angle_dict,
+                {"s2": key[0], "s3": key[1], "a3": key[2]},
+                prediction_info,
+                sim_geometry_info,
+            )
 
     latest_gen_num = 0
     latest_file = ""
@@ -158,22 +203,19 @@ def resume_from_log():
             latest_file = f
 
     if not latest_file:
-        return 1, None, None, None, []
+        return 1, None, None, None, evaluation_cache
 
     latest_filepath = os.path.join(log_dir, latest_file)
     try:
         df = pd.read_csv(latest_filepath)
         is_complete = "parent" in df["role"].values
 
-        # 【邏輯修正】: 定義正確的基因欄位名稱
         gene_columns = ["Design_S2", "Design_S3", "Design_A3"]
-
-        # 處理欄位可能不存在的舊格式日誌
         if "S2" in df.columns and "Design_S2" not in df.columns:
             gene_columns = ["S2", "S3", "A3"]
         elif not all(col in df.columns for col in gene_columns):
             print(f"⚠️ 日誌檔案 '{latest_file}' 缺少必要的基因欄位。將從頭開始。")
-            return 1, None, None, None, []
+            return 1, None, None, None, evaluation_cache
 
         if is_complete:
             print(
@@ -198,7 +240,7 @@ def resume_from_log():
                 for _, r in final_parents.iterrows()
             ]
 
-            return start_gen, pop_genes, pop_sigmas, parent_eval, []
+            return start_gen, pop_genes, pop_sigmas, parent_eval, evaluation_cache
         else:
             # 簡化恢復邏輯：如果世代未完成，則從該世代的初始父代重新開始
             print(f"🔁 偵測到未完成的第 {latest_gen_num} 代，將從此代重新開始評估。")
@@ -209,7 +251,7 @@ def resume_from_log():
                 print(
                     f"⚠️ 第 {start_gen} 代日誌損毀 (找不到 'parent_old' 資訊)，將從頭開始。"
                 )
-                return 1, None, None, None, []
+                return 1, None, None, None, evaluation_cache
 
             pop_genes = parent_old_df[gene_columns].to_numpy(dtype=float)
             pop_sigmas = parent_old_df[["sigma1", "sigma2", "sigma3"]].to_numpy(
@@ -217,11 +259,11 @@ def resume_from_log():
             )
 
             # 返回 None，觸發對該世代的重新評估
-            return start_gen, pop_genes, pop_sigmas, None, []
+            return start_gen, pop_genes, pop_sigmas, None, evaluation_cache
 
     except Exception as e:
         print(f"❌ 讀取日誌檔案 '{latest_filepath}' 時發生錯誤: {e}。將從頭開始。")
-        return 1, None, None, None, []
+        return 1, None, None, None, evaluation_cache
 
 
 def send_error(subject, body=""):
