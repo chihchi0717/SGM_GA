@@ -174,10 +174,10 @@ def find_apexes_with_convexity(contour, img_shape):
     for tol_percent in [0.03, 0.02, 0.015, 0.01, 0.008, 0.005, 0.003]:
         tolerance = contour_diagonal * tol_percent
         corners = approximate_polygon(contour, tolerance=tolerance)
-        if len(corners) >= 10:
+        if len(corners) >= 7:
             best_corners = corners
             # 如果角點太多，可能過於破碎，提前停止
-            if len(corners) > 11:
+            if len(corners) > 8:
                 break
 
     if best_corners is None:
@@ -418,7 +418,7 @@ if __name__ == "__main__":
     # --- 重要：請在此設定您的圖片資料夾路徑 ---
     input_directory = (
         #r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202508\DOE_RB\test"
-        r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202509\0903"
+        r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202509\0908"
     )
     output_directory = os.path.join(input_directory, "results_analyzed_final")
 

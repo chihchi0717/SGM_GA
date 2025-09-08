@@ -45,4 +45,4 @@ VAR_RANGES = np.array(
 
 # === 路徑設定 ===
 LOG_DIR = r"C:\Users\cchih\OneDrive - NTHU\msi"
-TRAIN_DATA_PATH = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\GA\SGM_GA\main\model_excel\analysis_results_0.6_0.9.xlsx"
+TRAIN_DATA_PATH = r".\model_excel\analysis_results_0.6_0.9.xlsx"

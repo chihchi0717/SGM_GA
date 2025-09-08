@@ -657,7 +657,11 @@ async def main_async(args: argparse.Namespace):
         # --- 【關鍵修正】 ---
         # 只有在成功評估了子代 (即發生了探索) 的情況下，才記錄 'parent' 角色，
         # 這才能標誌著一個世代的真正完成。
-        generation_is_truly_complete = len(offspring_eval) == config.OFFSPRING_SIZE
+        generation_is_truly_complete = False
+        if len(offspring_eval) == (config.OFFSPRING_SIZE):
+            generation_is_truly_complete = True
+        print(f"本代成功評估子代數: {len(offspring_eval)}")
+        print(f"子代數: {config.OFFSPRING_SIZE}")
         if generation_is_truly_complete:
             for i in range(len(next_pop_eval)):
                 current_rows.append(

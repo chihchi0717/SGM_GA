@@ -411,9 +411,9 @@ class PrismBuilder:
 def main():
     # um2mm = 0.001
 
-    sid_ang = [0.33, 0.86, 90]
-    folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202509\0903"
-    sat_name = os.path.join(folder, "0.33_0.86_90_0.6sub_OM.SAT")
+    sid_ang = [0.47, 0.81, 85.27]
+    folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202509\0907"
+    sat_name = os.path.join(folder, "0.47_0.81_85.27_0.6sub_MS.SAT")
     paths = OutputPaths(folder=folder, sat_name=sat_name)
 
     builder = PrismBuilder(scale=1)
@@ -423,8 +423,8 @@ def main():
         paths=paths,
         sub_length_x=0.6,
         base_length_y=38, # MS:38
-        sub_thickness=3,  # MS:15 # Alpha: 5 #OM:3
-        base_length_x=5,  # MS:11 # Alpha: 3 #OM:5
+        sub_thickness=15,  # MS:15 # Alpha: 5 #OM:3
+        base_length_x=11,  # MS:11 # Alpha: 3 #OM:5
         base_thickness=5,
         fillet=0,
     )
