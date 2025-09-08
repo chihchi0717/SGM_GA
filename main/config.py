@@ -24,6 +24,10 @@ DIVERSITY_PENALTY_FACTOR = 0.15
 # === 並行處理設定 ===
 MAX_WORKERS = os.cpu_count() or 4
 
+# === 模擬錯誤重試設定 ===
+# 當 AutoCAD 或 TracePro 模擬失敗時的最大重試次數
+SIM_MAX_RETRIES = 3
+
 # === 模型設定 ===
 MODEL_TYPE = "Huber"
 ADD_RATIOS = False

@@ -359,19 +359,32 @@ def evaluate_individual(individual_data, generation, parent_indices):
         "predicted_a3": sim_design["Design_a3(deg)"],
     }
 
-    sim_result = run_simulation(
-        sim_design["Design_s1(mm)"],
-        sim_design["Design_s2(mm)"],
-        sim_design["Design_s3(mm)"],
-        sim_design["Design_a1(deg)"],
-        sim_design["Design_a2(deg)"],
-        sim_design["Design_a3(deg)"],
-        loop_num,
-        individual,
-    )
+    # --- 模擬執行與重試機制 ---
+    sim_result = None
+    attempt = 0
+    while sim_result is None:
+        attempt += 1
+        sim_result = run_simulation(
+            sim_design["Design_s1(mm)"],
+            sim_design["Design_s2(mm)"],
+            sim_design["Design_s3(mm)"],
+            sim_design["Design_a1(deg)"],
+            sim_design["Design_a2(deg)"],
+            sim_design["Design_a3(deg)"],
+            loop_num,
+            individual,
+        )
 
-    if sim_result is None:
-        return None
+        if sim_result is None:
+            if attempt >= config.SIM_MAX_RETRIES:
+                print(
+                    f"❌ Simulation for individual P{loop_num} failed after {attempt} attempts. Skipping this individual."
+                )
+                return None
+            print(
+                f"⚠️ Simulation for individual P{loop_num} failed on attempt {attempt}. Retrying..."
+            )
+            time.sleep(1)
 
     fitness, efficiency, process_score, angle_eff_list = (
         sim_result[0],
