@@ -32,9 +32,9 @@ mpl.rcParams.update(
 )
 
 # === 設定 ===
-base_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\Optimize_Regression\[0.45, 0.57, 79.91]"
-excel_path = os.path.join(base_folder, "EXP_SIM_combined_fillet.xlsx")
-output_folder = os.path.join(base_folder, "EXP_SIM_FIGURES_design")
+base_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\DOE\design[0.9, 0.6, 60]"
+excel_path = os.path.join(base_folder, "EXP_SIM_shrinkage_fillet.xlsx")
+output_folder = os.path.join(base_folder, "EXP_SIM_FIGURES_only_fillet")
 os.makedirs(output_folder, exist_ok=True)
 
 # --- 實驗數據標準化設定 (開關) ---

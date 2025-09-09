@@ -48,9 +48,9 @@ def safe_float(value, default=0.0):
 def format_for_log(individual):
     """Formats an individual's genes into a dictionary for logging."""
     return {
-        "S2": f"{individual[0]:.4f}",
-        "S3": f"{individual[1]:.4f}",
-        "A3": f"{individual[2]:.4f}",
+        "S2": f"{individual[0]:.2f}",
+        "S3": f"{individual[1]:.2f}",
+        "A3": f"{individual[2]:.2f}",
     }
 
 
@@ -101,17 +101,17 @@ def create_log_row(genes, sigmas, eval_result, gen, role, parent_indices):
         "efficiency": f"{efficiency:.4f}",
         "process_score": f"{process_score:.4f}",
         # 設計值 (演算法決定的基因值)
-        "Design_S2": f"{genes[0]:.4f}",
-        "Design_S3": f"{genes[1]:.4f}",
-        "Design_A3": f"{genes[2]:.4f}",
+        "Design_S2": f"{genes[0]:.2f}",
+        "Design_S3": f"{genes[1]:.2f}",
+        "Design_A3": f"{genes[2]:.2f}",
         # 預測收縮/變化率 (由補償模型預測)
         "Pred_delta_s2": f"{prediction_info.get('pred_delta_s2', 0.0):.6f}",
         "Pred_delta_s3": f"{prediction_info.get('pred_delta_s3', 0.0):.6f}",
         # "Pred_dip_a3": f"{prediction_info.get('pred_dip_a3', 0.0):.4f}",
         # 預測幾何值 (最終用於模擬的值)
-        "Predicted_S2": f"{sim_geometry_info.get('predicted_s2', 0.0):.4f}",
-        "Predicted_S3": f"{sim_geometry_info.get('predicted_s3', 0.0):.4f}",
-        "Predicted_A3": f"{sim_geometry_info.get('predicted_a3', 0.0):.4f}",
+        "Predicted_S2": f"{sim_geometry_info.get('predicted_s2', 0.0):.2f}",
+        "Predicted_S3": f"{sim_geometry_info.get('predicted_s3', 0.0):.2f}",
+        "Predicted_A3": f"{sim_geometry_info.get('predicted_a3', 0.0):.2f}",
         # Sigma 值
         "sigma1": f"{sigmas[0]:.6f}",
         "sigma2": f"{sigmas[1]:.6f}",
@@ -167,7 +167,7 @@ def resume_from_log():
 
         angle_cols = [c for c in df_all.columns if c.startswith("eff_")]
         for _, r in df_all.iterrows():
-            key = tuple(round(safe_float(r[c]), 4) for c in gene_cols)
+            key = tuple(round(safe_float(r[c]), 2) for c in gene_cols)
             angle_dict = {
                 int(col.split("_")[1]): safe_float(r[col])
                 for col in angle_cols

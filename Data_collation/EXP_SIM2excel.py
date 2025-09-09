@@ -11,14 +11,16 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 # === 主要設定：只需要修改這裡 ===
 # 設定包含 EXP、SIM_design 和 SIM_shrinkage 資料夾的上層路徑
-base_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\Optimize_Regression\[0.45, 0.57, 79.91]"
+base_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\DOE\design[0.9, 0.6, 60]"
 
 # === 自動生成路徑 ===
 exp_folder = os.path.join(base_folder, "EXP")
-design_sim_folder = os.path.join(base_folder, "SIM_design")
+design_sim_folder = os.path.join(
+    base_folder, "blank"
+)  # "SIM_design" #blank #SIM_shrinkage
 shrinkage_sim_folder = os.path.join(base_folder, "SIM_fillet")
 output_path = os.path.join(
-    base_folder, "EXP_SIM_combined_fillet.xlsx"
+    base_folder, "EXP_SIM_shrinkage_fillet.xlsx"
 )  # "EXP_SIM_combined.xlsx"
 
 # === 檢查路徑是否存在 ===

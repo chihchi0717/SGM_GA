@@ -11,14 +11,14 @@ ANGLE_WEIGHTS = [1, 2, 5, 7, 5, 8.5, 1.5, 2]
 def main():
     # sid_ang = [0.46, 0.95, 85]
     # sid_ang = [0.0502, 0.0355, 45] #liao
-    sid_ang = [0.45, 0.57, 79.91]
+    sid_ang = [0.85, 0.53, 55.37]
     # sid_ang = [0.48, 0.98, 85]
     # sid_ang = [0.62, 0.96, 67]
     base_dir = os.path.dirname(os.path.abspath(__file__))
     # output_dir = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\MOO_best_PS_OM[0.9, 0.9, 30]\SIM"
     # folder = os.path.join(output_dir, "[0.9, 0.9, 30]_N1.3_F2_5_3_sub0.6)_allele")
-    output_dir = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\Optimize_Regression\[0.45, 0.57, 79.91]\SIM"
-    folder = os.path.join(output_dir, "[0.45, 0.57, 79.91]_N1.2536_F0_sub0.6")
+    output_dir = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\DOE\design[0.9, 0.6, 60]\SIM_fillet"
+    folder = os.path.join(output_dir, "[0.85, 0.53, 55.37]_N1.2536_F2_53_34_sub0.6")
     os.makedirs(folder, exist_ok=True)
 
     # Copy simulation macro
@@ -30,7 +30,7 @@ def main():
         sid_ang,
         mode="triangle",
         folder=folder,
-        fillet=0,
+        fillet=2,
         light_source_length=1,
         radius_inside=0.053,
         radius_vertex=0.034,

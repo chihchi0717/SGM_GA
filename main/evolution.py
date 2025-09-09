@@ -311,7 +311,7 @@ def evaluate_individual(individual_data, generation, parent_indices):
     loop_num, individual, _, _ = individual_data
     s2, s3, a3 = individual
 
-    gene_key = tuple(round(v, 4) for v in individual)
+    gene_key = tuple(round(v, 2) for v in individual)
     with evaluation_cache_lock:
         cached_result = evaluation_cache.get(gene_key)
     if cached_result is not None:
