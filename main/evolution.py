@@ -410,25 +410,49 @@ def evaluate_individual(individual_data, generation, parent_indices):
     return eval_result
 
 
-# --- (新增) 純突變函式 ---
+def recombine_global(parents_genes, parents_sigmas):
+    """
+    全域重組：
+    - 基因值 x ：全域離散重組 (每一維從隨機父代取值)
+    - 步長 σ ：全域中介重組 (取所有父代的平均)
+    """
+    m, n = parents_genes.shape
+    # x: global discrete
+    child_gene = np.array([parents_genes[np.random.randint(m), i] for i in range(n)])
+    # σ: global intermediary
+    child_sigma = np.mean(parents_sigmas, axis=0)
+    return child_gene, child_sigma
+
+
 def mutate_individual(parent_gene, parent_sigma, adaptation_mode):
     """
-    從單一父代透過突變產生一個子代。
-    支援適應性或固定的突變強度。
+    Uncorrelated mutation with n σ’s (self-adaptation).
+    - σ 先突變再用於 x
+    - 有 boundary rule
     """
+    n = config.N_VARS
     child_genes = np.copy(parent_gene)
     child_sigmas = np.copy(parent_sigma)
 
     if adaptation_mode == "adaptive":
-        # 適應性突變：同時演化 sigma 值
-        N = np.random.normal(0, 1)
-        N_i = np.random.normal(0, 1, config.N_VARS)
-        child_sigmas *= np.exp(config.TAU_PRIME * N + config.TAU * N_i)
+        # 自動設定學習率
+        tau_prime = 1.0 / np.sqrt(2.0 * n)
+        tau = 1.0 / np.sqrt(2.0 * np.sqrt(n))
 
-    # 使用新的 (或固定的) sigma 進行突變
-    child_genes += child_sigmas * np.random.normal(0, 1, config.N_VARS)
+        # 先突變 σ
+        N0 = np.random.normal(0, 1)
+        Ni = np.random.normal(0, 1, n)
+        child_sigmas = child_sigmas * np.exp(tau_prime * N0 + tau * Ni)
 
-    # 確保基因在邊界範圍內
+        # Boundary rule
+        sigma_min = getattr(config, "SIGMA_MIN", 1e-6)
+        sigma_max = getattr(config, "SIGMA_MAX", np.array(config.VAR_RANGES, float))
+        child_sigmas = np.clip(child_sigmas, sigma_min, sigma_max)
+
+    # 再突變 x
+    child_genes = child_genes + child_sigmas * np.random.normal(0, 1, n)
+
+    # 確保基因在設計範圍內
     child_genes[0] = np.clip(child_genes[0], *config.SIDE_BOUND)
     child_genes[1] = np.clip(child_genes[1], *config.SIDE_BOUND)
     child_genes[2] = np.clip(child_genes[2], *config.ANGLE_BOUND)
@@ -587,11 +611,24 @@ async def main_async(args: argparse.Namespace):
         children_data = []
         for _ in range(config.OFFSPRING_SIZE):
             parent_idx = random.randrange(len(successful_parent_genes))
+            # 例如每次隨機選 3 個父代做重組
+            num_parents = min(3, len(successful_parent_genes))
+            selected_indices = np.random.choice(
+                len(successful_parent_genes), num_parents, replace=False
+            )
+            parent_subset_genes = successful_parent_genes[selected_indices]
+            parent_subset_sigmas = successful_parent_sigmas[selected_indices]
+
+            recombined_gene, recombined_sigma = recombine_global(
+                parent_subset_genes, parent_subset_sigmas
+            )
+
             child_gene, child_sigma = mutate_individual(
-                successful_parent_genes[parent_idx],
-                successful_parent_sigmas[parent_idx],
+                recombined_gene,
+                recombined_sigma,
                 args.mutation_adaptation,
             )
+
             children_data.append((child_gene, child_sigma, (parent_idx, -1)))
 
         offspring_results = []
