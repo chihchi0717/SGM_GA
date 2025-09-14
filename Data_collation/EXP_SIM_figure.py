@@ -34,7 +34,7 @@ mpl.rcParams.update(
 # === 設定 ===
 base_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\Optimize_Regression\[0.45, 0.57, 79.91]"
 excel_path = os.path.join(base_folder, "EXP_SIM_shrinkage_fillet.xlsx")
-output_folder = os.path.join(base_folder, "EXP_SIM_FIGURES_2")
+output_folder = os.path.join(base_folder, "EXP_SIM_FIGURES_3")
 os.makedirs(output_folder, exist_ok=True)
 
 # --- 實驗數據標準化設定 (開關) ---
@@ -256,8 +256,4 @@ for sheet_name in xls.sheet_names:
     except Exception as e:
         print(f"❌ Error in sheet {sheet_name}: {e}")
 
-# === 匯出波峰資料 (此版本簡化，暫不計算波峰) ===
-# peak_df = pd.DataFrame(all_peaks)
-# peak_output = os.path.join(output_folder, "All_Peaks_Export.xlsx")
-# peak_df.to_excel(peak_output, index=False)
-# print(f"✅ All peaks saved to: {peak_output}")
+
