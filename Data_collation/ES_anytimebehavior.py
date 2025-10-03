@@ -308,17 +308,17 @@ def main():
     # 主圖
     plt.figure()  # 使用 rcParams.figure.figsize
     # 各 run（虛線 + 步階）
-    for nm, s in zip(names, series):
-        y = step_align(s["x"], s[Y_KEY], all_x)
-        mask = all_x <= s["x"][-1]
-        plt.step(
-            all_x[mask],
-            moving_avg(y[mask], SMOOTH_K),
-            where="post",
-            linestyle="--",
-            alpha=0.55,
-            label=nm,
-        )
+    # for nm, s in zip(names, series):
+    #     y = step_align(s["x"], s[Y_KEY], all_x)
+    #     mask = all_x <= s["x"][-1]
+    #     plt.step(
+    #         all_x[mask],
+    #         moving_avg(y[mask], SMOOTH_K),
+    #         where="post",
+    #         linestyle="--",
+    #         alpha=0.55,
+    #         label=nm,
+    #     )
     # 前段 partial（若有）
     # if full_start > 0:
     #     plt.step(
@@ -362,8 +362,8 @@ def main():
     #         label="Mean (partial)",
     #     )
 
-    plt.title(f"Best vs #evaluations ({len(names)} runs)")
-    plt.xlabel("Number of evaluations (unique designs, cumulative)")
+    #plt.title(f"Best vs #evaluations ({len(names)} runs)")
+    plt.xlabel("Number of evaluations")
     plt.ylabel("Fitness")
     plt.legend(loc="lower right")
     if SHOW_GRID:
@@ -411,8 +411,8 @@ def main():
             alpha=0.20,
             label="Std Error",
         )
-        plt.title(f"{Y_KEY.capitalize()} vs #evaluations (zoomed)")
-        plt.xlabel("Number of evaluations (unique designs, cumulative)")
+        #plt.title(f"{Y_KEY.capitalize()} vs #evaluations (zoomed)")
+        plt.xlabel("Number of evaluations")
         plt.ylabel("Fitness")
         plt.legend(loc="lower right")
         if SHOW_GRID:
@@ -538,17 +538,17 @@ def main():
             s_start, s_end = 0, len(all_x) - 1
 
         plt.figure()
-        for nm, s in zip(names, series):
-            y = step_align(s["x"], s["sigma"], all_x)
-            mask = all_x <= s["x"][-1]
-            plt.step(
-                all_x[mask],
-                moving_avg(y[mask], SMOOTH_K),
-                where="post",
-                linestyle="--",
-                alpha=0.55,
-                label=nm,
-            )
+        # for nm, s in zip(names, series):
+        #     y = step_align(s["x"], s["sigma"], all_x)
+        #     mask = all_x <= s["x"][-1]
+        #     plt.step(
+        #         all_x[mask],
+        #         moving_avg(y[mask], SMOOTH_K),
+        #         where="post",
+        #         linestyle="--",
+        #         alpha=0.55,
+        #         label=nm,
+        #     )
         # if s_start > 0:
         #     plt.step(
         #         all_x[:s_start],
@@ -586,8 +586,8 @@ def main():
         #         linestyle=":",
         #         label="Mean σ (partial)",
         #     )
-        plt.title("Step-size σ vs #evaluations (Mean ± Std-Error)")
-        plt.xlabel("Number of evaluations (unique designs, cumulative)")
+        #plt.title("Step-size σ vs #evaluations (Mean ± Std-Error)")
+        plt.xlabel("Number of evaluations")
         plt.ylabel("Step-size σ")
         plt.legend(loc="lower right")
         if SHOW_GRID:

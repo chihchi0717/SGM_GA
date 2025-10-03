@@ -231,7 +231,7 @@ def calculate_dip_s1(s2, s3, a3):
 
 
 def analyze_prism_image(file_path, output_folder):
-    """主分析函數，尋找斜邊交點並標註長度與夾角。"""
+    """主分析函數，尋找斜邊交點並標註長度與夾角 (期刊風格輸出)。"""
     print(f"Processing file: {file_path}")
 
     try:
@@ -252,200 +252,87 @@ def analyze_prism_image(file_path, output_folder):
 
     contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
-    fig, ax = plt.subplots(figsize=(10, 15))
+    fig, ax = plt.subplots(figsize=(6, 8))
 
     if not contours:
         print("  Analysis failed: Could not find any contours.")
-        ax.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
         plt.close(fig)
         return None
 
     main_contour = max(contours, key=cv2.contourArea)
     main_contour_reshaped = main_contour.reshape(-1, 2)
 
+    # 灰色填充 + 黑色輪廓
+    # 灰色填充 (沒有黑色外框)
     ax.fill(
-        main_contour_reshaped[:, 0], main_contour_reshaped[:, 1], color="gray", zorder=1
+        main_contour_reshaped[:, 0],
+        main_contour_reshaped[:, 1],
+        color="lightgray",
+        zorder=1,
     )
-    ax.set_xlim(0, img.shape[1])
-    ax.set_ylim(0, img.shape[0])
-    ax.grid(True, which="both", linestyle="--", linewidth=0.5, color="lightgray")
 
     apexes_from_contour = find_apexes_with_convexity(main_contour_reshaped, img.shape)
-
     if len(apexes_from_contour) < 3:
         print(f"  Analysis failed: Found only {len(apexes_from_contour)} apexes.")
         plt.close(fig)
         return None
 
-    print("--- Analysis Summary ---")
-
     apexes_by_y = sorted(apexes_from_contour, key=lambda a: a["point"][1])
-
     extended_lines = []
     for i in range(len(apexes_by_y) - 1):
         p1_apex = apexes_by_y[i]
         p2_apex = apexes_by_y[i + 1]
-
         idx1 = nearest_idx(main_contour_reshaped, p1_apex["point"])
         idx2 = nearest_idx(main_contour_reshaped, p2_apex["point"])
-
         segment_points = slice_contour(main_contour_reshaped, idx1, idx2)
-
         if len(segment_points) > len(main_contour_reshaped) * 0.6:
             segment_points = slice_contour(main_contour_reshaped, idx2, idx1)
-
         fitted_line = fit_line_to_segment(segment_points, extension_length=500)
-
         if fitted_line:
             extended_lines.append(fitted_line)
             pt1, pt2 = fitted_line
             ax.plot(
-                [pt1[0], pt2[0]], [pt1[1], pt2[1]], "c--", lw=1.5, alpha=0.8, zorder=2
+                [pt1[0], pt2[0]],
+                [pt1[1], pt2[1]],
+                color="blue",
+                linestyle="--",
+                linewidth=1.0,
+                zorder=3,
+                clip_on=False,
             )
 
     intersection_points = []
     intersection_angles = []
-
     for i in range(len(extended_lines) - 1):
-        line1 = extended_lines[i]
-        line2 = extended_lines[i + 1]
-
-        result = find_intersection(line1, line2)
+        result = find_intersection(extended_lines[i], extended_lines[i + 1])
         if result:
             intersection, angle = result
             intersection_points.append(intersection)
             intersection_angles.append(angle)
-            ax.plot(intersection[0], intersection[1], "r*", markersize=15, zorder=12)
-            # ax.text(
-            #     intersection[0] + 15,
-            #     intersection[1] - 15,
-            #     f"{angle:.1f}°",
-            #     color="cyan",
-            #     fontsize=14,
-            #     fontweight="bold",
-            #     zorder=15,
-            # )
-            print(
-                f"  Intersection {i+1} at: ({intersection[0]:.1f}, {intersection[1]:.1f})"
-            )
-            print(f"  Angle at intersection {i+1}: {angle:.1f} degrees")
-
-    # 新增: 建立一個列表來儲存每個結構的分析結果
-    structures_data = []
-
-    # --- 修正後的計算迴圈 ---
-    # 從第二個交點開始，因為每個結構需要三個連續交點來定義（p_prev, p_curr, p_next）
-    for i in range(1, len(intersection_points)):
-        p_prev = np.array(intersection_points[i - 1])  # 上一個交點 (用於計算 DIP_s2)
-        p_curr = np.array(
-            intersection_points[i]
-        )  # 當前交點 (結構的頂點，用於計算 DIP_a3, DIP_s1)
-        angle_at_curr = intersection_angles[i - 1]  # 取得上一個交點的夾角
-
-        # 繪製並標註上斜邊（DIP_s2）
-        length_s2 = np.linalg.norm(p_curr - p_prev)
-        mid_point_s2 = (p_curr + p_prev) / 2
-        # ax.text(
-        #     mid_point_s2[0] + 10,
-        #     mid_point_s2[1],
-        #     f"S2:{length_s2:.1f}",
-        #     color="orange",
-        #     fontsize=14,
-        #     fontweight="bold",
-        #     zorder=15,
-        # )
-        ax.plot(
-            [p_prev[0], p_curr[0]],
-            [p_prev[1], p_curr[1]],
-            color="orange",
-            linestyle="-",
-            linewidth=2,
-            zorder=10,
-        )
-        print(f"  Length between intersection {i} and {i+1} (DIP_s2): {length_s2:.1f}")
-
-        # 計算並標註下斜邊（DIP_s3）
-        # 需要檢查是否有下一個交點
-        if i + 1 < len(intersection_points):
-            p_next = np.array(
-                intersection_points[i + 1]
-            )  # 下一個交點 (用於計算 DIP_s3)
-            length_s3 = np.linalg.norm(p_next - p_curr)
-            mid_point_s3 = (p_curr + p_next) / 2
-            # ax.text(
-            #     mid_point_s3[0] + 10,
-            #     mid_point_s3[1],
-            #     f"S3:{length_s3:.1f}",
-            #     color="orange",
-            #     fontsize=14,
-            #     fontweight="bold",
-            #     zorder=15,
-            # )
             ax.plot(
-                [p_curr[0], p_next[0]],
-                [p_curr[1], p_next[1]],
-                color="orange",
-                linestyle="-",
-                linewidth=2,
-                zorder=10,
+                intersection[0],
+                intersection[1],
+                "ro",
+                markersize=5,
+                zorder=5,
+                clip_on=False,
             )
-            print(
-                f"  Length between intersection {i+1} and {i+2} (DIP_s3): {length_s3:.1f}"
-            )
-        else:
-            length_s3 = 0
 
-        # 計算垂直邊長度 DIP_s1
-        length_s1 = calculate_dip_s1(length_s2, length_s3, angle_at_curr)
-        # ax.text(
-        #     p_curr[0] + 10,
-        #     p_curr[1] + 30,
-        #     f"S1:{length_s1:.1f}",
-        #     color="yellow",
-        #     fontsize=14,
-        #     fontweight="bold",
-        #     zorder=15,
-        # )
-        print(
-            f"  Calculated DIP_s1 for structure at intersection {i+1}: {length_s1:.1f}"
-        )
-
-        # 將結果存入列表
-        structures_data.append(
-            {
-                "FileName": os.path.basename(file_path),
-                "StructureID": i,
-                "DIP_s2": length_s2,
-                "DIP_s3": length_s3,
-                "DIP_a3": angle_at_curr,
-                "DIP_s1": length_s1,
-            }
-        )
-    # --- 修正後的計算迴圈結束 ---
-
-    left_line_data = fit_left_substrate(binary)
-    if left_line_data:
-        p1, p2, angle = left_line_data
-        ax.plot([p1[0], p2[0]], [p1[1], p2[1]], color="yellow", linewidth=3, zorder=3)
-        # ax.text(
-        #     p1[0] + 20,
-        #     p1[1] + (p2[1] - p1[1]) / 2,
-        #     f"Left {abs(90-angle):.1f} deg",
-        #     color="yellow",
-        #     fontsize=14,
-        #     fontweight="bold",
-        # )
-
-    print("-" * 24 + "\n")
-    ax.set_title(os.path.basename(file_path).split(".")[0], fontsize=16)
+    # 保持比例與原始圖一致
+    ax.set_xlim(0, img.shape[1])
+    ax.set_ylim(0, img.shape[0])
     ax.set_aspect("equal", adjustable="box")
-    plt.gca().invert_yaxis()
-    output_path = os.path.join(output_folder, f"analyzed_{os.path.basename(file_path)}")
-    plt.savefig(output_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Result saved to: {output_path}")
 
-    return structures_data
+    # 去掉軸
+    ax.set_axis_off()
+    plt.gca().invert_yaxis()
+
+    # 儲存時不要自動裁切，保持原始邊界比例
+    output_path = os.path.join(output_folder, f"analyzed_{os.path.basename(file_path)}")
+    plt.savefig(output_path, dpi=300, bbox_inches=None, pad_inches=0)
+    plt.close(fig)
+
+    return []
 
 
 # --- 主執行區塊 ---
@@ -463,9 +350,7 @@ if __name__ == "__main__":
     input_directory = (
         r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202508\DOE_RB\0.6_0.9"
     )
-    output_directory = os.path.join(
-        input_directory, "results_analyzed_final_1003"
-    )
+    output_directory = os.path.join(input_directory, "results_analyzed_final_1003")
 
     if not os.path.isdir(input_directory):
         print(f"Error: Directory not found: '{input_directory}'")
