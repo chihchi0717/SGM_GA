@@ -151,9 +151,9 @@ def find_apexes_with_convexity(contour, img_shape):
     for tol_percent in [0.1, 0.03, 0.02, 0.015, 0.01, 0.008, 0.005, 0.003, 0.0001]:
         tolerance = contour_diagonal * tol_percent
         corners = approximate_polygon(contour, tolerance=tolerance)
-        if len(corners) >= 6:
+        if len(corners) >= 5:
             best_corners = corners
-            if len(corners) > 9:
+            if len(corners) > 6:
                 break
 
     if best_corners is None:
@@ -316,15 +316,15 @@ def analyze_prism_image(file_path, output_folder):
             intersection_points.append(intersection)
             intersection_angles.append(angle)
             ax.plot(intersection[0], intersection[1], "r*", markersize=15, zorder=12)
-            # ax.text(
-            #     intersection[0] + 15,
-            #     intersection[1] - 15,
-            #     f"{angle:.1f}°",
-            #     color="cyan",
-            #     fontsize=14,
-            #     fontweight="bold",
-            #     zorder=15,
-            # )
+            ax.text(
+                intersection[0] + 15,
+                intersection[1] - 15,
+                f"{angle:.1f}°",
+                color="cyan",
+                fontsize=14,
+                fontweight="bold",
+                zorder=15,
+            )
             print(
                 f"  Intersection {i+1} at: ({intersection[0]:.1f}, {intersection[1]:.1f})"
             )
@@ -345,15 +345,15 @@ def analyze_prism_image(file_path, output_folder):
         # 繪製並標註上斜邊（DIP_s2）
         length_s2 = np.linalg.norm(p_curr - p_prev)
         mid_point_s2 = (p_curr + p_prev) / 2
-        # ax.text(
-        #     mid_point_s2[0] + 10,
-        #     mid_point_s2[1],
-        #     f"S2:{length_s2:.1f}",
-        #     color="orange",
-        #     fontsize=14,
-        #     fontweight="bold",
-        #     zorder=15,
-        # )
+        ax.text(
+            mid_point_s2[0] + 10,
+            mid_point_s2[1],
+            f"S2:{length_s2:.1f}",
+            color="orange",
+            fontsize=14,
+            fontweight="bold",
+            zorder=15,
+        )
         ax.plot(
             [p_prev[0], p_curr[0]],
             [p_prev[1], p_curr[1]],
@@ -372,15 +372,15 @@ def analyze_prism_image(file_path, output_folder):
             )  # 下一個交點 (用於計算 DIP_s3)
             length_s3 = np.linalg.norm(p_next - p_curr)
             mid_point_s3 = (p_curr + p_next) / 2
-            # ax.text(
-            #     mid_point_s3[0] + 10,
-            #     mid_point_s3[1],
-            #     f"S3:{length_s3:.1f}",
-            #     color="orange",
-            #     fontsize=14,
-            #     fontweight="bold",
-            #     zorder=15,
-            # )
+            ax.text(
+                mid_point_s3[0] + 10,
+                mid_point_s3[1],
+                f"S3:{length_s3:.1f}",
+                color="orange",
+                fontsize=14,
+                fontweight="bold",
+                zorder=15,
+            )
             ax.plot(
                 [p_curr[0], p_next[0]],
                 [p_curr[1], p_next[1]],
@@ -397,15 +397,15 @@ def analyze_prism_image(file_path, output_folder):
 
         # 計算垂直邊長度 DIP_s1
         length_s1 = calculate_dip_s1(length_s2, length_s3, angle_at_curr)
-        # ax.text(
-        #     p_curr[0] + 10,
-        #     p_curr[1] + 30,
-        #     f"S1:{length_s1:.1f}",
-        #     color="yellow",
-        #     fontsize=14,
-        #     fontweight="bold",
-        #     zorder=15,
-        # )
+        ax.text(
+            p_curr[0] + 10,
+            p_curr[1] + 30,
+            f"S1:{length_s1:.1f}",
+            color="yellow",
+            fontsize=14,
+            fontweight="bold",
+            zorder=15,
+        )
         print(
             f"  Calculated DIP_s1 for structure at intersection {i+1}: {length_s1:.1f}"
         )
@@ -427,14 +427,14 @@ def analyze_prism_image(file_path, output_folder):
     if left_line_data:
         p1, p2, angle = left_line_data
         ax.plot([p1[0], p2[0]], [p1[1], p2[1]], color="yellow", linewidth=3, zorder=3)
-        # ax.text(
-        #     p1[0] + 20,
-        #     p1[1] + (p2[1] - p1[1]) / 2,
-        #     f"Left {abs(90-angle):.1f} deg",
-        #     color="yellow",
-        #     fontsize=14,
-        #     fontweight="bold",
-        # )
+        ax.text(
+            p1[0] + 20,
+            p1[1] + (p2[1] - p1[1]) / 2,
+            f"Left {abs(90-angle):.1f} deg",
+            color="yellow",
+            fontsize=14,
+            fontweight="bold",
+        )
 
     print("-" * 24 + "\n")
     ax.set_title(os.path.basename(file_path).split(".")[0], fontsize=16)
@@ -461,7 +461,7 @@ if __name__ == "__main__":
 
     # --- 重要：請在此設定您的圖片資料夾路徑 ---
     input_directory = (
-        r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202508\DOE_RB\0.6_0.9"
+        r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202510\1008"
     )
     output_directory = os.path.join(
         input_directory, "results_analyzed_final_1003"

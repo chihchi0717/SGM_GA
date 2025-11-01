@@ -8,7 +8,7 @@ from analyze_profile import (
 )  # 引入剛剛的函式（另存為 analyze_profile.py）
 
 # === 設定資料夾 ===
-folder_path = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202508\NEAF"
+folder_path = r"C:\Users\cchih\Desktop\YH"
 figure_path = os.path.join(folder_path, "figures")
 summary_list = []
 

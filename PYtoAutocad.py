@@ -238,8 +238,8 @@ class PrismBuilder:
                 send_command_with_retry(self.acad, "_EXTRUDE\nL\n\n1\n")
                 send_command_with_retry(self.acad, "UNION\nALL\n\n")
 
-                row_spacing = 40  # side_a * self.scale * (rows - 1)
-                rows, columns = int(row_spacing * (1 / side_a)) + 1, 1  # 30, 1
+                rows, columns = 30, 1
+                row_spacing = side_a * self.scale * (rows - 1)
                 column_spacing = 1
 
                 send_command_with_retry(
@@ -411,9 +411,9 @@ class PrismBuilder:
         else:
             raise ValueError("mode must be 'stair' or 'triangle'")
 
-        actual_array_top = (rows - 1) * (
+        actual_array_top = top + (rows - 1) * (
             top - bottom
-        )  # top + (rows - 1) * (top - bottom)
+        )  # top + (rows - 1) * (top - bottom) #(rows - 1) * (top - bottom)
         array_center_y = (actual_array_top) / 2  # (actual_array_top) / 2  # + bottom
         center_y = round(array_center_y * self.scale, 1)
         center_x = 0  # round(Cx * self.scale + 1, 1)
