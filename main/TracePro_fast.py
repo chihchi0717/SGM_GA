@@ -39,7 +39,6 @@ def safe_click(ctrl, max_attempts: int = 3, delay: float = 0.5):
 
 def load_macro(app, path_macro, max_attempts: int = 3):
     afxc = app["Afx:400000:8:10003:0:bf0aa1"].wait("ready")
-    # afxc.menu_item(u'&Window->&1 Model:[initiate.OML]').select()
     afxc.menu_select("&Window->&1 Model:[initiate.OML]")
 
     app.window(title_re=".*TracePro.*").menu_item("&Macros->&Execute").select()
@@ -74,19 +73,13 @@ def tracepro_fast(path_macro, timeout=60, exe_path=None):
     win.wait("ready")
     time.sleep(0.1)
 
-    # 開啟 Polar 與 Rectangular Candela Plot
-    # win.menu_select("&Analysis->Candela Plots->Polar Candela Distribution")
-    # time.sleep(0.1)
-    # win.menu_select("&Analysis->Candela Plots->Rectangular Candela Distribution")
-    # time.sleep(0.1)
-
     while True:
         # 開啟 Polar 與 Rectangular Candela Plot
         win.menu_select("&Analysis->Candela Plots->Polar Candela Distribution")
         time.sleep(0.1)
         win.menu_select("&Analysis->Candela Plots->Rectangular Candela Distribution")
         time.sleep(0.1)
-        #print("▶️ 執行模擬 macro:", os.path.basename(path_macro))
+        # print("▶️ 執行模擬 macro:", os.path.basename(path_macro))
         load_macro(app, path_macro)
 
         if wait_file(signal, timeout=timeout):
@@ -99,26 +92,5 @@ def tracepro_fast(path_macro, timeout=60, exe_path=None):
         load_macro(app, reset_path)
         time.sleep(0.1)
         safe_click(win["開啟(&O)Button"])
-        # 清掉重試前可能殘留的 signal
-        # if os.path.exists(signal):
-        #     os.remove(signal)
-        # 休息一下再重試（可依需要調整）
+
         time.sleep(0.1)
-    # 執行主 macro
-    # load_macro(app, path_macro)
-    # start_time = time.time()
-
-    # if wait_file(signal):
-    #     #print("模擬完成")
-    #     time.sleep(0.1)
-    #     load_macro(app, reset_path)
-    #     #print("已執行 Reset.scm 初始化")
-    # else:
-    #     print("超時未完成")
-    #     load_macro(app, reset_path)
-    # #print("Tracepro Execution time:", round(time.time() - start_time, 2), "sec")
-    # return os.path.exists(signal)
-
-
-# 執行
-# tracepro_fast(r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202507\0710\Sim.scm")

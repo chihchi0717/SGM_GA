@@ -224,7 +224,7 @@ class PrismBuilder:
         equ_bc = lambda x: slope_bc * x + intercept_bc
         top = (math.floor(equ_bc(0) / self.pixel_size)) * self.pixel_size
         bottom = (math.ceil(equ_ac(0) / self.pixel_size)) * self.pixel_size
-        # print(f"Cx: {Cx:.2f}, Cy: {Cy:.2f}")
+
         if mode == "triangle":
             top = equ_bc(0)
             bottom = equ_ac(0)
@@ -282,74 +282,7 @@ class PrismBuilder:
 
                 send_command_with_retry(self.acad, "UNION\nALL\n\n")
 
-            # if fillet == 2:
-            #     x = round(Cx * self.scale, 1)
-            #     y = round(Cy * self.scale, 1)
-            #     corner_x1 = x + 0.05
-            #     corner_y1 = y - 0.05
-            #     corner_x2 = x - 0.05
-            #     corner_y2 = y + 0.05
-
-            #     send_command_with_retry(
-            #         self.acad,
-            #         f"FILLET\nRadius\n{radius_vertex}\nC\n{corner_x1},{corner_y1}\n{corner_x2},{corner_y2}\n",
-            #     )
-            #     rows, columns = 2, 1
-            #     row_spacing = side_a * self.scale * (rows - 1)
-            #     column_spacing = 1
-            #     send_command_with_retry(
-            #         self.acad,
-            #         f"ARRAY\nALL\n\nR\nCOL\n{columns}\nT\n{column_spacing}\nR\n{rows}\nT\n{row_spacing}\n0\nX\n",
-            #     )
-
-            #     send_command_with_retry(self.acad, "Explode\nALL\n\n")
-            #     send_command_with_retry(
-            #         self.acad,
-            #         f"_.ZOOM\nE\n\n",
-            #     )
-            #     # corner_x3 = 0.4
-            #     # corner_y3 = 0.2
-            #     # corner_x4 = 0.1
-            #     # corner_y4 = 0.7
-            #     print("r",r)
-            #     corner_x3 = Ix + r
-            #     corner_y3 = Iy
-            #     corner_x4 = Ix * 0.8
-            #     corner_y4 = Iy + side_a - r
-
-            #     send_command_with_retry(
-            #         self.acad,
-            #         f"FILLET\nRadius\n{radius_inside}\nC\n{corner_x3},{corner_y3}\n{corner_x4},{corner_y4}\n",
-            #     )
-            #     rows, columns = 30, 1
-            #     row_spacing = side_a * self.scale * (rows - 1)
-            #     column_spacing = 1
-            #     send_command_with_retry(
-            #         self.acad,
-            #         f"ARRAY\nC\n{Cx*1.5},{Iy + r *1.05}\n{0},{Iy + side_a + r}\n\nR\nCOL\n{columns}\nT\n{column_spacing}\nR\n{rows}\nT\n{row_spacing}\n0\nX\n",
-            #     )
-            #     # send_command_with_retry(
-            #     #     self.acad,
-            #     #     f"ARRAY\nC\n{Cx+0.05},{top+0.05}\n{0},{top*1.8+0.05}\n\nR\nCOL\n{columns}\nT\n{column_spacing}\nR\n{rows}\nT\n{row_spacing}\n0\nX\n",
-            #     # )
-            #     send_command_with_retry(self.acad, "Explode\nALL\n\n")
-
-            #     send_command_with_retry(self.acad, "ZOOM\nE\n")
-            #     #small side
-            #     # send_command_with_retry(
-            #     #     self.acad, f"TRIM\n{0.1},{top *1.5}\n{0.1},{top * (rows * 1.01)}\n\n"
-            #     # )
-            #     send_command_with_retry(
-            #         self.acad, f"TRIM\n{0.02},{top*1.5}\n{0.02},{top *2.5}\n\n"
-            #     )
-            #     send_command_with_retry(self.acad, "SELECT\nALL\n\nJOIN\nALL\n\n")
-            #     send_command_with_retry(self.acad, "SELECT\nALL\n\n_JOIN\n\n")
-            #     send_command_with_retry(self.acad, "ZOOM\nE\n\n")
-
-            #     send_command_with_retry(self.acad, f"-BOUNDARY\n{Ix},{Iy}\n\n")
-            #     send_command_with_retry(self.acad, "_EXTRUDE\nALL\n\n1\n")
-            #     # time.sleep(self.sleep_time)
-            #     send_command_with_retry(self.acad, "UNION\nALL\n\n")
+            
             if fillet == 2:
                 x = round(Cx * self.scale, 1)
                 y = round(Cy * self.scale, 1)
@@ -365,8 +298,6 @@ class PrismBuilder:
 
                 rows, columns = 30, 1
                 row_spacing = side_a * self.scale * (rows - 1)
-                # row_spacing = 40
-                # rows, columns = int(row_spacing * (1 / side_a)) + 1, 1  # 30, 1
                 column_spacing = 1
                 send_command_with_retry(
                     self.acad,
@@ -388,15 +319,7 @@ class PrismBuilder:
                         f"FILLET\nRadius\n{radius_inside}\nC\n{corner_x3},{corner_y3+side_a*i}\n{corner_x4},{corner_y4+side_a*i}\n",
                     )
                 send_command_with_retry(self.acad, "Explode\nALL\n\n")
-
                 send_command_with_retry(self.acad, "ZOOM\nE\n")
-                # small side
-                # send_command_with_retry(
-                #     self.acad, f"TRIM\n{0.1},{top *1.5}\n{0.1},{top * (rows * 1.01)}\n\n"
-                # )
-                # send_command_with_retry(
-                #     self.acad, f"TRIM\n{0.02},{top*1.5}\n{0.02},{top *2.5}\n\n"
-                # )
 
                 send_command_with_retry(self.acad, "SELECT\nALL\n\nJOIN\nALL\n\n")
                 send_command_with_retry(self.acad, "SELECT\nALL\n\n_JOIN\n\n")
@@ -428,7 +351,6 @@ class PrismBuilder:
             self._add_substrate(paths, substrate, actual_array_top, 1)
         send_command_with_retry(self.acad, "UNION\nALL\n\n")
 
-        # 20250619
         start_point = APoint(190, array_center_y * self.scale, 0)
         send_command_with_retry(
             self.acad,

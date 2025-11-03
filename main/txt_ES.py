@@ -61,23 +61,9 @@ def score_data(i):
     return score, avg, uni, std
 
 
-def compute_regression_score(S1, S2, A1):
-    return (
-        -0.067
-        + 0.217 * S1
-        + 0.275 * S2
-        + 0.002 * A1
-        - 0.506 * S1 * S2
-        - 0.002 * S1 * A1
-        - 0.002 * S2 * A1
-        + 0.004 * S1 * S2 * A1
-    )
-
-
 def evaluate_fitness(
     folder,
     individual,
-    return_uniformity=False,
     eff_weight=1,
     process_weight=1,
     uni_weight=1,
@@ -112,7 +98,6 @@ def evaluate_fitness(
             data_lines = lines[6:]
             total_energy = 0
             upward_energy = 0
-            upward_values = []
 
             angle_intensities = []
             for line in data_lines:
@@ -126,8 +111,6 @@ def evaluate_fitness(
                     angle_intensities.append(intensity_col1)
                     if polar_angle > 67.38:
                         upward_energy += intensity_col1
-                        if return_uniformity:
-                            upward_values.append(intensity_col1)
                 except ValueError:
                     continue
 
@@ -140,12 +123,6 @@ def evaluate_fitness(
             weighted_efficiency_total += eff * weights[idx]
             weight_sum += weights[idx]
 
-            if return_uniformity:
-                upward_uni.append(
-                    np.mean(upward_values) * (1 / np.std(upward_values))
-                    if upward_values
-                    else 0.0
-                )
 
         except Exception as e:
 
@@ -156,37 +133,13 @@ def evaluate_fitness(
     if weight_sum == 0:
         efficiency = 0
     else:
-        # efficiency = weighted_efficiency_total / weight_sum
         efficiency = weighted_efficiency_total
 
-    try:
-        emd = compute_regression_score(S1, S2, A1)
-    except Exception as e:
-        print(f"⚠️ 製程品質評估失敗: {e}")
-        emd = 1.0
 
-    if return_uniformity:
-        uniformity = float(np.mean(upward_uni)) if upward_uni else 0.0
-
-    else:
-        uniformity = 0.0
-
-    process_score = 1 / (1 + emd)
     fitness = eff_weight * efficiency
-
-    if return_uniformity:
-        return (
-            fitness,
-            efficiency,
-            process_score,
-            uniformity,
-            efficiencies_per_angle,
-            upward_uni,
-        )
-    else:
-        return (
-            fitness,
-            efficiency,
-            process_score,
-            efficiencies_per_angle,
-        )
+ 
+    return (
+        fitness,
+        efficiency,
+        efficiencies_per_angle,
+    )

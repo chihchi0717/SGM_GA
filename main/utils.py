@@ -67,11 +67,6 @@ def setup_keyboard_hooks():
 
 
 def create_log_row(genes, sigmas, eval_result, gen, role, parent_indices):
-    """
-    創建一個標準化的日誌行 (字典)。
-    【修改】: 新增了 Predicted_S2, Predicted_S3, Predicted_A3 欄位。
-    """
-    # 【修改】解包 eval_result，使其能處理 5, 6, 7 個元素，確保相容性
     if len(eval_result) == 7:
         (
             fitness,

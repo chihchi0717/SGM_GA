@@ -717,7 +717,7 @@ async def main_async(args: argparse.Namespace):
                 )
             )
 
-        # --- 【關鍵修正】 ---
+
         # 只有在成功評估了子代 (即發生了探索) 的情況下，才記錄 'parent' 角色，
         # 這才能標誌著一個世代的真正完成。
         generation_is_truly_complete = False
