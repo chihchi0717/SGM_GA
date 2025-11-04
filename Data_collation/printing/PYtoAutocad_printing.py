@@ -352,26 +352,6 @@ class PrismBuilder:
         else:
             raise ValueError("mode must be 'stair' or 'triangle'")
 
-        # send_command_with_retry(self.acad, "SELECT\nALL\n\n_JOIN\n\n")
-        # send_command_with_retry(self.acad, "ZOOM\nE\n\n")
-        # send_command_with_retry(
-        #     self.acad,
-        #     f"-BOUNDARY\n{round(Ix * self.scale, 4)},{round(Iy * self.scale, 4)}\n\n",
-        # )
-
-        # send_command_with_retry(self.acad, f"_EXTRUDE\nL\n\n{base_length_y}\n")
-        # send_command_with_retry(self.acad, "UNION\nALL\n\n")
-
-        # rows = int(base_length_y / (side_a * self.scale))
-        # row_spacing = side_a * self.scale * (rows - 1)
-        # send_command_with_retry(
-        #     self.acad,
-        #     f"ARRAY\nALL\n\nR\nCOL\n1\nT\n1\nR\n{rows}\nT\n{row_spacing}\n0\nX\n",
-        # )
-        # time.sleep(self.sleep_time)
-        # send_command_with_retry(self.acad, "Explode\nALL\n\n")
-        # send_command_with_retry(self.acad, "UNION\nALL\n\n")
-
         self._add_substrate(paths, sub_length_x, base_length_y, sub_thickness)
         self._add_base(paths, Cx, base_length_x, base_length_y, base_thickness)
 
