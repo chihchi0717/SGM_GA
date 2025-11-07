@@ -464,7 +464,7 @@ if __name__ == "__main__":
         r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\202510\1008"
     )
     output_directory = os.path.join(
-        input_directory, "results_analyzed_final_1003"
+        input_directory, "results_analyzed_final"
     )
 
     if not os.path.isdir(input_directory):
