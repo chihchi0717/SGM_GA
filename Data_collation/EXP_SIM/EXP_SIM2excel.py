@@ -11,7 +11,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 # === 主要設定：只需要修改這裡 ===
 # 設定包含 EXP、SIM_design 和 SIM_shrinkage 資料夾的上層路徑
-base_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\Optimize_Regression\[0.82, 0.66, 63.58]"
+base_folder = r"C:\Users\cchih\Desktop\NTHU\3rd_last_semester\CIRP\regression_model\SIM"
 
 # === 自動生成路徑 ===
 exp_folder = os.path.join(base_folder, "EXP")

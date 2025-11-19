@@ -32,7 +32,7 @@ mpl.rcParams.update(
 )
 
 # === 設定 ===
-base_folder = r"C:\Users\cchih\Desktop\NTHU\MasterThesis\research_log\best_params\Optimize_Regression\[0.82, 0.66, 63.58]"
+base_folder = r"C:\Users\cchih\Desktop\NTHU\3rd_last_semester\CIRP\regression_model\SIM"
 excel_path = os.path.join(base_folder, "EXP_SIM_design.xlsx")
 output_folder = os.path.join(base_folder, "EXP_SIM_design")
 os.makedirs(output_folder, exist_ok=True)
